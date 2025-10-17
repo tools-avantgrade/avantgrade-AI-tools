@@ -391,6 +391,60 @@ if 'results' in st.session_state and st.session_state['results']:
     
     with tab1:
         st.markdown("### 🎯 Risultati SERP Completi")
+        
+        all_urls = "\n".join(df['URL'].tolist())
+        
+        # Header con info
+        st.info(f"📊 **{len(df)} URL estratti** dalla query: *{st.session_state['query']}*")
+        
+        # Tab per copia
+        col_copy1, col_copy2 = st.columns(2)
+        
+        with col_copy1:
+            # Text area per copia manuale
+            st.text_area(
+                "📋 Seleziona e Copia (Ctrl+A → Ctrl+C)",
+                all_urls,
+                height=150
+            )
+        
+        with col_copy2:
+            st.markdown("### 💾 Oppure Scarica")
+            
+            # Download TXT
+            st.download_button(
+                "📥 Scarica TXT",
+                all_urls,
+                f"urls_{st.session_state['query'].replace(' ', '_')}.txt",
+                "text/plain",
+                use_container_width=True
+            )
+            
+            # Download CSV (solo URL)
+            urls_csv = "URL\n" + "\n".join(df['URL'].tolist())
+            st.download_button(
+                "📊 Scarica CSV",
+                urls_csv,
+                f"urls_{st.session_state['query'].replace(' ', '_')}.csv",
+                "text/csv",
+                use_container_width=True
+            )
+            
+            st.markdown("""
+            <div style='background: #1a1a1a; padding: 1rem; border-radius: 8px; 
+                        border-left: 4px solid #00cc66; margin-top: 1rem;'>
+                <small style='color: #00cc66;'>
+                    💡 <strong>Tip:</strong> Usa Ctrl+A per selezionare tutto, 
+                    poi Ctrl+C per copiare!
+                </small>
+            </div>
+            """, unsafe_allow_html=True)
+        
+        st.markdown("---")
+        
+        # Lista risultati completi
+        st.markdown("### 📋 Dettaglio Risultati")
+        
         for idx, row in df.iterrows():
             st.markdown(f"""
             <div class='url-box'>
@@ -507,6 +561,7 @@ with st.expander("ℹ️ Come ottenere una API Key gratuita di SerpAPI"):
     - 🎯 Analisi dettagliata title, snippet e domini
     - 📏 Metriche di lunghezza media
     - 🌐 Analisi distribuzione domini
+    - 📋 Copia rapida URL con text area
     """)
 
 st.markdown("---")
