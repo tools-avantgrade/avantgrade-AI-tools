@@ -69,6 +69,7 @@ st.markdown("""
         margin: 1rem 0;
         transition: all 0.3s ease;
         box-shadow: 0 4px 15px rgba(255, 107, 53, 0.2);
+        height: 100%;
     }
     
     .tool-card:hover {
@@ -175,8 +176,8 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 
-# Tools Grid
-col1, col2 = st.columns(2)
+# Tools Grid - 3 colonne
+col1, col2, col3 = st.columns(3)
 
 with col1:
     st.markdown("""
@@ -193,6 +194,31 @@ with col1:
     
     st.markdown("""
     <div class='tool-card'>
+        <div class='tool-icon'>📊</div>
+        <h2 class='tool-title'>Keyword Research</h2>
+        <p class='tool-description'>
+            Scopri nuove opportunità di keyword con volumi di ricerca, 
+            difficoltà e trend. Analisi competitiva avanzata.
+        </p>
+        <span class='tool-status status-coming'>⏳ COMING SOON</span>
+    </div>
+    """, unsafe_allow_html=True)
+
+with col2:
+    st.markdown("""
+    <div class='tool-card'>
+        <div class='tool-icon'>🤖</div>
+        <h2 class='tool-title'>Query Fan-Out</h2>
+        <p class='tool-description'>
+            Espandi query singole in varianti intelligenti usando Gemini AI. 
+            Perfetto per keyword expansion e content planning.
+        </p>
+        <span class='tool-status status-active'>✓ ATTIVO</span>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    st.markdown("""
+    <div class='tool-card'>
         <div class='tool-icon'>🎯</div>
         <h2 class='tool-title'>Content Optimizer</h2>
         <p class='tool-description'>
@@ -202,7 +228,8 @@ with col1:
         <span class='tool-status status-coming'>⏳ COMING SOON</span>
     </div>
     """, unsafe_allow_html=True)
-    
+
+with col3:
     st.markdown("""
     <div class='tool-card'>
         <div class='tool-icon'>🔗</div>
@@ -210,19 +237,6 @@ with col1:
         <p class='tool-description'>
             Monitora il profilo backlink del tuo sito e dei competitor. 
             Analisi completa di autorità e qualità dei link.
-        </p>
-        <span class='tool-status status-coming'>⏳ COMING SOON</span>
-    </div>
-    """, unsafe_allow_html=True)
-
-with col2:
-    st.markdown("""
-    <div class='tool-card'>
-        <div class='tool-icon'>📊</div>
-        <h2 class='tool-title'>Keyword Research</h2>
-        <p class='tool-description'>
-            Scopri nuove opportunità di keyword con volumi di ricerca, 
-            difficoltà e trend. Analisi competitiva avanzata.
         </p>
         <span class='tool-status status-coming'>⏳ COMING SOON</span>
     </div>
@@ -305,6 +319,7 @@ with st.sidebar:
     st.markdown("""
     **Strumenti Attivi:**
     - 🔍 SERP Analyzer
+    - 🤖 Query Fan-Out
     
     **Coming Soon:**
     - 📊 Keyword Research
