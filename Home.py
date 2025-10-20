@@ -232,6 +232,18 @@ with col2:
 with col3:
     st.markdown("""
     <div class='tool-card'>
+        <div class='tool-icon'>🕷️</div>
+        <h2 class='tool-title'>Competitor Content Analyzer</h2>
+        <p class='tool-description'>
+            Analizza i tag HTML (title, meta, H1-H3) dai competitor.
+            Estrai struttura SEO, immagini e metadata in pochi secondi.
+        </p>
+        <span class='tool-status status-active'>✓ ATTIVO</span>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    st.markdown("""
+    <div class='tool-card'>
         <div class='tool-icon'>🔗</div>
         <h2 class='tool-title'>Backlink Checker</h2>
         <p class='tool-description'>
@@ -320,6 +332,7 @@ with st.sidebar:
     **Strumenti Attivi:**
     - 🔍 SERP Analyzer
     - 🤖 Query Fan-Out
+    - 🕷️ Competitor Content Analyzer
     
     **Coming Soon:**
     - 📊 Keyword Research
