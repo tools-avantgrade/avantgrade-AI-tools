@@ -3,665 +3,326 @@ import pandas as pd
 import json
 import time
 from openai import OpenAI
-import plotly.graph_objects as go
-import plotly.express as px
 from io import BytesIO
 
 # Configurazione pagina
 st.set_page_config(
-    page_title="Keyword Clustering Expert | Avantgrade Tools",
+    page_title="Keyword Clustering Expert",
     page_icon="🧩",
     layout="wide"
 )
 
-# CSS personalizzato (identico agli altri tool)
+# CSS minimale
 st.markdown("""
     <style>
     .stApp {
-        background: linear-gradient(180deg, #000000 0%, #1a0a00 100%);
+        background-color: #000000;
     }
     
-    h1, h2, h3, h4, h5, h6, p, label, .stMarkdown {
+    h1, h2, h3, p, label {
         color: #ffffff !important;
     }
     
-    .tool-header {
-        background: linear-gradient(135deg, #FF6B35 0%, #F7931E 100%);
-        padding: 2rem;
-        border-radius: 15px;
-        text-align: center;
-        margin-bottom: 2rem;
-        box-shadow: 0 8px 20px rgba(255, 107, 53, 0.3);
-    }
-    
-    .feature-card {
-        background: linear-gradient(145deg, #1a1a1a 0%, #2d2d2d 100%);
-        border: 2px solid #FF6B35;
-        border-radius: 12px;
-        padding: 1.5rem;
-        margin: 1rem 0;
-        box-shadow: 0 4px 12px rgba(255, 107, 53, 0.2);
-    }
-    
-    .feature-card h3 {
-        color: #FF6B35 !important;
-        margin-bottom: 0.5rem;
-    }
-    
-    .cluster-box {
-        background: rgba(255, 107, 53, 0.1);
-        border-left: 4px solid #FF6B35;
-        padding: 1.5rem;
-        margin: 1rem 0;
-        border-radius: 8px;
-    }
-    
-    .cluster-title {
-        color: #FF6B35 !important;
-        font-size: 1.3em;
-        font-weight: bold;
-        margin-bottom: 0.5rem;
-    }
-    
-    .cluster-intent {
-        background: linear-gradient(135deg, #F7931E 0%, #FF6B35 100%);
-        color: white;
-        padding: 0.3rem 1rem;
-        border-radius: 20px;
-        font-size: 0.9em;
-        font-weight: bold;
-        display: inline-block;
-        margin: 0.5rem 0;
-    }
-    
-    .keyword-pill {
-        background: #2d2d2d;
-        color: #cccccc;
-        padding: 0.4rem 1rem;
-        border-radius: 15px;
-        margin: 0.3rem;
-        display: inline-block;
-        border: 1px solid #FF6B35;
-        font-size: 0.95em;
-    }
-    
-    .stats-box {
-        background: linear-gradient(135deg, #2d2d2d 0%, #1a1a1a 100%);
-        border: 2px solid #FF6B35;
-        border-radius: 12px;
-        padding: 1.5rem;
-        text-align: center;
-        box-shadow: 0 4px 12px rgba(255, 107, 53, 0.2);
-    }
-    
-    .stats-number {
-        font-size: 2.5em;
-        font-weight: bold;
-        color: #FF6B35;
-        margin: 0;
-    }
-    
-    .stats-label {
-        color: #cccccc;
-        font-size: 1.1em;
-        margin-top: 0.5rem;
+    .stTextArea textarea {
+        background-color: #1a1a1a !important;
+        color: #ffffff !important;
+        border: 1px solid #FF6B35 !important;
+        font-family: monospace;
     }
     
     .stButton>button {
-        background: linear-gradient(135deg, #FF6B35 0%, #F7931E 100%);
+        background-color: #FF6B35;
         color: white;
-        font-weight: bold;
-        border-radius: 10px;
-        padding: 0.75rem 2rem;
         border: none;
-        font-size: 1.1em;
-        box-shadow: 0 4px 8px rgba(255, 107, 53, 0.3);
-        transition: all 0.3s ease;
+        padding: 0.5rem 2rem;
+        font-weight: 600;
         width: 100%;
     }
     
     .stButton>button:hover {
-        transform: translateY(-2px);
-        box-shadow: 0 6px 12px rgba(255, 107, 53, 0.5);
+        background-color: #F7931E;
+    }
+    
+    .success-box {
+        background-color: #1a1a1a;
+        border-left: 3px solid #00ff88;
+        padding: 1rem;
+        margin: 1rem 0;
+        color: #cccccc;
     }
     
     .info-box {
-        background: rgba(247, 147, 30, 0.1);
-        border: 1px solid #F7931E;
-        border-radius: 8px;
+        background-color: #1a1a1a;
+        border-left: 3px solid #FF6B35;
         padding: 1rem;
         margin: 1rem 0;
-    }
-    
-    .warning-box {
-        background: rgba(255, 107, 53, 0.1);
-        border: 1px solid #FF6B35;
-        border-radius: 8px;
-        padding: 1rem;
-        margin: 1rem 0;
+        color: #cccccc;
     }
     </style>
 """, unsafe_allow_html=True)
 
-# Header
-st.markdown("""
-<div class='tool-header'>
-    <h1 style='color: white; margin: 0; font-size: 2.5em;'>🧩 Keyword Clustering Expert</h1>
-    <p style='color: white; margin: 0.5rem 0 0 0; font-size: 1.2em; opacity: 0.95;'>
-        AI-Powered Semantic Keyword Grouping with GPT-4 Turbo
-    </p>
-</div>
-""", unsafe_allow_html=True)
+# Header minimale
+st.title("🧩 Keyword Clustering Expert")
+st.markdown("**AI-powered semantic grouping con GPT-5**")
+st.markdown("---")
 
-# Introduzione
-st.markdown("""
-<div class='info-box'>
-    <p style='color: #cccccc; font-size: 1.05em; margin: 0;'>
-        <strong style='color: #F7931E;'>Keyword Clustering Expert</strong> analizza automaticamente le tue keyword e le raggruppa 
-        per <strong>search intent</strong> e <strong>relazioni semantiche</strong>, aiutandoti a creare strategie di contenuto 
-        mirate e ottimizzate per la SEO.
-    </p>
-</div>
-""", unsafe_allow_html=True)
-
-# Features cards
-st.markdown("### 💡 Funzionalità Principali")
-
-col_f1, col_f2, col_f3 = st.columns(3)
-
-with col_f1:
-    st.markdown("""
-    <div class='feature-card'>
-        <h3>🎯 Search Intent Classification</h3>
-        <p style='color: #cccccc;'>
-            Categorizzazione automatica come Commercial, Transactional o Informational
-        </p>
-    </div>
-    """, unsafe_allow_html=True)
-
-with col_f2:
-    st.markdown("""
-    <div class='feature-card'>
-        <h3>🧠 Semantic Grouping</h3>
-        <p style='color: #cccccc;'>
-            Clustering basato su relazioni semantiche per topic coherence
-        </p>
-    </div>
-    """, unsafe_allow_html=True)
-
-with col_f3:
-    st.markdown("""
-    <div class='feature-card'>
-        <h3>📊 Multilingual Support</h3>
-        <p style='color: #cccccc;'>
-            Analisi keyword in multiple lingue per SEO internazionale
-        </p>
-    </div>
-    """, unsafe_allow_html=True)
-
-st.markdown("<br>", unsafe_allow_html=True)
-
-# Sidebar - Configurazione
+# Sidebar minimale
 with st.sidebar:
-    st.markdown("## ⚙️ Configurazione")
+    st.markdown("### ⚙️ Configurazione")
     
-    st.markdown("### 🔑 OpenAI API Key")
     api_key = st.text_input(
-        "Inserisci la tua API Key",
+        "OpenAI API Key",
         type="password",
-        help="Ottieni la tua API key da platform.openai.com"
-    )
-    
-    st.markdown("### 🌍 Lingua Target")
-    target_language = st.selectbox(
-        "Seleziona lingua",
-        ["Italiano", "English", "Español", "Français", "Deutsch"],
-        help="Lingua per l'analisi delle keyword"
-    )
-    
-    st.markdown("### 🎚️ Parametri Clustering")
-    
-    min_cluster_size = st.slider(
-        "Dimensione minima cluster",
-        min_value=2,
-        max_value=10,
-        value=3,
-        help="Numero minimo di keyword per cluster"
-    )
-    
-    max_clusters = st.slider(
-        "Numero massimo cluster",
-        min_value=3,
-        max_value=15,
-        value=8,
-        help="Limita il numero di cluster generati"
+        help="Inserisci la tua API key"
     )
     
     st.markdown("---")
-    st.markdown("### 📚 Info Tool")
-    st.markdown("""
-    **Modello:** GPT-4 Turbo
     
-    **Search Intent:**
-    - 🛒 Commercial
-    - 💰 Transactional
-    - 📖 Informational
+    language = st.selectbox(
+        "Lingua",
+        ["Italiano", "English", "Español", "Français", "Deutsch"]
+    )
     
-    **Output:**
-    - Cluster overview
-    - Detailed markdown
-    - Excel export
-    - Visualizzazioni
-    """)
+    min_cluster_size = st.slider(
+        "Min keywords per cluster",
+        2, 10, 3
+    )
+    
+    max_clusters = st.slider(
+        "Max clusters",
+        3, 20, 10
+    )
+    
+    st.markdown("---")
+    st.markdown("**Modello:** GPT-5 (gpt-5)")
+    st.markdown("**Max keywords:** 3000+")
 
-# Form principale
-st.markdown("## 📝 Input Keywords")
+# Input area principale
+st.markdown("### 📝 Input Keywords")
 
 keywords_input = st.text_area(
     "Inserisci le keyword (una per riga)",
-    height=200,
-    placeholder="migliori smartphone 2025\nsmartphone economici\ncome scegliere smartphone\nreview iPhone 15\nacquistare Samsung Galaxy...",
-    help="Inserisci ogni keyword su una riga separata"
+    height=300,
+    placeholder="keyword 1\nkeyword 2\nkeyword 3\n...",
+    help="Una keyword per riga. Supporta fino a 3000+ keywords."
 )
 
 # Info box
 st.markdown("""
-<div class='warning-box'>
-    <p style='color: #cccccc; margin: 0; font-size: 0.95em;'>
-        <strong style='color: #FF6B35;'>💡 Suggerimento:</strong> 
-        Inserisci almeno 10-15 keyword per ottenere cluster significativi. 
-        Il tool funziona meglio con keyword correlate allo stesso topic.
-    </p>
+<div class='info-box'>
+💡 <strong>Supporto per liste grandi:</strong> Il tool gestisce automaticamente liste di 3000+ keywords 
+dividendole in batch per ottimizzare performance e costi.
 </div>
 """, unsafe_allow_html=True)
 
 # Bottone analisi
-col_btn1, col_btn2, col_btn3 = st.columns([1, 2, 1])
-with col_btn2:
-    analyze_button = st.button("🚀 Analizza e Raggruppa Keywords", use_container_width=True)
+analyze_btn = st.button("🚀 Analizza Keywords", use_container_width=True)
 
-# Funzione clustering con OpenAI
-def cluster_keywords_with_gpt4(keywords_list, api_key, language, min_size, max_clusters):
+# Funzione clustering con GPT-5
+def cluster_keywords_gpt5(keywords_list, api_key, language, min_size, max_clusters):
     """
-    Clustering semantico usando GPT-4
+    Clustering con GPT-5 (gpt-5) - supporto liste grandi con batching
     """
     try:
         client = OpenAI(api_key=api_key)
         
-        # Prompt engineering per clustering
-        prompt = f"""You are a professional SEO expert specializing in keyword clustering and search intent analysis.
+        # Per liste molto grandi, usa batching intelligente
+        batch_size = 500  # Batch ottimale per GPT-5
+        all_clusters = []
+        total_batches = (len(keywords_list) + batch_size - 1) // batch_size
+        
+        if len(keywords_list) > batch_size:
+            st.info(f"📦 Lista grande rilevata ({len(keywords_list)} keywords). Elaborazione in {total_batches} batch...")
+            
+        for batch_idx in range(total_batches):
+            start_idx = batch_idx * batch_size
+            end_idx = min(start_idx + batch_size, len(keywords_list))
+            batch_keywords = keywords_list[start_idx:end_idx]
+            
+            if total_batches > 1:
+                st.text(f"Batch {batch_idx + 1}/{total_batches}: keywords {start_idx+1}-{end_idx}")
+            
+            # Prompt ottimizzato per GPT-5
+            prompt = f"""Analyze and cluster these {len(batch_keywords)} keywords in {language}.
 
-Analyze the following list of keywords in {language} language and group them into semantic clusters.
+Keywords:
+{chr(10).join(f"- {kw}" for kw in batch_keywords)}
 
-Keywords to analyze:
-{chr(10).join(f"- {kw}" for kw in keywords_list)}
+Create {min(max_clusters, len(batch_keywords)//min_size)} semantic clusters.
+Each cluster needs at least {min_size} keywords.
+Classify search intent: Commercial, Transactional, or Informational.
 
-Instructions:
-1. Create between 3 and {max_clusters} semantic clusters
-2. Each cluster should contain at least {min_size} keywords (if possible)
-3. Identify the main theme/topic for each cluster
-4. Classify the search intent for each cluster as: Commercial, Transactional, or Informational
-5. Group keywords that have semantic relationships and similar user search intent
-
-Return ONLY a valid JSON object with this exact structure (no markdown, no code blocks, just raw JSON):
+Return valid JSON:
 {{
   "clusters": [
     {{
-      "cluster_name": "Clear descriptive name for the cluster",
+      "cluster_name": "string",
       "search_intent": "Commercial|Transactional|Informational",
-      "keywords": ["keyword1", "keyword2", "keyword3"],
-      "description": "Brief explanation of why these keywords are grouped together"
+      "keywords": ["kw1", "kw2"],
+      "description": "string"
     }}
-  ],
-  "summary": {{
-    "total_keywords": number,
-    "total_clusters": number,
-    "commercial_clusters": number,
-    "transactional_clusters": number,
-    "informational_clusters": number
-  }}
+  ]
 }}
 
-CRITICAL: Return ONLY the JSON object, no additional text, no markdown formatting, no code blocks."""
+JSON only, no markdown."""
 
-        response = client.chat.completions.create(
-            model="gpt-4-turbo-preview",
-            messages=[
-                {"role": "system", "content": "You are a professional SEO keyword clustering expert. You ONLY respond with valid JSON, nothing else."},
-                {"role": "user", "content": prompt}
-            ],
-            temperature=0.3,
-            max_tokens=4000
-        )
+            response = client.chat.completions.create(
+                model="gpt-5",  # GPT-5 (gpt-5-thinking)
+                messages=[
+                    {"role": "system", "content": "You are an SEO keyword clustering expert. Return only valid JSON."},
+                    {"role": "user", "content": prompt}
+                ],
+                temperature=0.2,
+                max_tokens=8000
+            )
+            
+            result_text = response.choices[0].message.content.strip()
+            
+            # Clean markdown
+            if result_text.startswith("```"):
+                result_text = result_text.split("```")[1]
+                if result_text.startswith("json"):
+                    result_text = result_text[4:]
+                result_text = result_text.strip()
+            
+            batch_result = json.loads(result_text)
+            all_clusters.extend(batch_result['clusters'])
         
-        result_text = response.choices[0].message.content.strip()
+        # Merge e calcola summary
+        summary = {
+            "total_keywords": len(keywords_list),
+            "total_clusters": len(all_clusters),
+            "commercial_clusters": sum(1 for c in all_clusters if c['search_intent'] == 'Commercial'),
+            "transactional_clusters": sum(1 for c in all_clusters if c['search_intent'] == 'Transactional'),
+            "informational_clusters": sum(1 for c in all_clusters if c['search_intent'] == 'Informational')
+        }
         
-        # Rimuovi eventuali markdown code blocks
-        if result_text.startswith("```"):
-            result_text = result_text.split("```")[1]
-            if result_text.startswith("json"):
-                result_text = result_text[4:]
-            result_text = result_text.strip()
+        result = {
+            "clusters": all_clusters,
+            "summary": summary
+        }
         
-        result = json.loads(result_text)
         return result, None
         
     except json.JSONDecodeError as e:
-        return None, f"Errore parsing JSON: {str(e)}"
+        return None, f"Errore JSON: {str(e)}"
     except Exception as e:
-        return None, f"Errore durante l'analisi: {str(e)}"
+        return None, f"Errore: {str(e)}"
 
 # Logica principale
-if analyze_button:
+if analyze_btn:
     if not api_key:
-        st.error("⚠️ Inserisci la tua OpenAI API Key nella sidebar!")
+        st.error("⚠️ Inserisci OpenAI API Key")
     elif not keywords_input.strip():
-        st.error("⚠️ Inserisci almeno una keyword!")
+        st.error("⚠️ Inserisci almeno una keyword")
     else:
-        # Parse keywords
         keywords_list = [kw.strip() for kw in keywords_input.strip().split('\n') if kw.strip()]
         
         if len(keywords_list) < 3:
-            st.warning("⚠️ Inserisci almeno 3 keyword per un clustering efficace")
+            st.warning("⚠️ Minimo 3 keywords richieste")
         else:
-            # Progress bar
-            with st.spinner('🤖 Analisi AI in corso con GPT-4...'):
-                progress_bar = st.progress(0)
-                status_text = st.empty()
+            # Progress
+            with st.spinner(f'🤖 Clustering {len(keywords_list)} keywords con GPT-5...'):
+                progress = st.progress(0)
                 
-                status_text.text("🔍 Analisi semantica keyword...")
-                progress_bar.progress(25)
-                time.sleep(0.5)
-                
-                status_text.text("🧠 Clustering con AI...")
-                progress_bar.progress(50)
-                
-                # Chiamata API
-                result, error = cluster_keywords_with_gpt4(
-                    keywords_list, 
-                    api_key, 
-                    target_language,
+                progress.progress(30)
+                result, error = cluster_keywords_gpt5(
+                    keywords_list,
+                    api_key,
+                    language,
                     min_cluster_size,
                     max_clusters
                 )
                 
-                progress_bar.progress(75)
-                status_text.text("📊 Generazione visualizzazioni...")
-                time.sleep(0.5)
-                
-                progress_bar.progress(100)
-                status_text.text("✅ Analisi completata!")
-                time.sleep(0.5)
-                
-                progress_bar.empty()
-                status_text.empty()
+                progress.progress(100)
+                time.sleep(0.3)
+                progress.empty()
             
             if error:
                 st.error(f"❌ {error}")
             else:
-                # Salva in session state
                 st.session_state['clustering_results'] = result
                 st.session_state['keywords_analyzed'] = keywords_list
                 
-                st.success(f"✅ Analisi completata! Trovati {result['summary']['total_clusters']} cluster semantici")
+                st.markdown(f"""
+                <div class='success-box'>
+                ✅ <strong>Analisi completata!</strong><br>
+                • {result['summary']['total_keywords']} keywords analizzate<br>
+                • {result['summary']['total_clusters']} cluster creati<br>
+                • {result['summary']['commercial_clusters']} Commercial | {result['summary']['transactional_clusters']} Transactional | {result['summary']['informational_clusters']} Informational
+                </div>
+                """, unsafe_allow_html=True)
 
 # Visualizzazione risultati
 if 'clustering_results' in st.session_state:
     result = st.session_state['clustering_results']
-    keywords_analyzed = st.session_state['keywords_analyzed']
     
     st.markdown("---")
-    st.markdown("## 📊 Risultati Clustering")
+    st.markdown("## 📊 Risultati")
     
-    # Statistiche generali
-    st.markdown("### 📈 Statistiche Generali")
+    # Crea tabella
+    table_data = []
+    for idx, cluster in enumerate(result['clusters'], 1):
+        for kw in cluster['keywords']:
+            table_data.append({
+                'Cluster #': idx,
+                'Cluster Name': cluster['cluster_name'],
+                'Search Intent': cluster['search_intent'],
+                'Keyword': kw,
+                'Description': cluster['description'],
+                'Cluster Size': len(cluster['keywords'])
+            })
     
-    col_s1, col_s2, col_s3, col_s4 = st.columns(4)
+    df = pd.DataFrame(table_data)
     
-    with col_s1:
-        st.markdown(f"""
-        <div class='stats-box'>
-            <p class='stats-number'>{result['summary']['total_keywords']}</p>
-            <p class='stats-label'>Keywords</p>
-        </div>
-        """, unsafe_allow_html=True)
+    # Mostra tabella
+    st.dataframe(
+        df,
+        use_container_width=True,
+        height=500
+    )
     
-    with col_s2:
-        st.markdown(f"""
-        <div class='stats-box'>
-            <p class='stats-number'>{result['summary']['total_clusters']}</p>
-            <p class='stats-label'>Clusters</p>
-        </div>
-        """, unsafe_allow_html=True)
+    st.markdown("---")
     
-    with col_s3:
-        avg_keywords = round(result['summary']['total_keywords'] / result['summary']['total_clusters'], 1)
-        st.markdown(f"""
-        <div class='stats-box'>
-            <p class='stats-number'>{avg_keywords}</p>
-            <p class='stats-label'>Media KW/Cluster</p>
-        </div>
-        """, unsafe_allow_html=True)
-    
-    with col_s4:
-        commercial_pct = round((result['summary']['commercial_clusters'] / result['summary']['total_clusters']) * 100)
-        st.markdown(f"""
-        <div class='stats-box'>
-            <p class='stats-number'>{commercial_pct}%</p>
-            <p class='stats-label'>Commercial</p>
-        </div>
-        """, unsafe_allow_html=True)
-    
-    st.markdown("<br>", unsafe_allow_html=True)
-    
-    # Tab per visualizzazioni diverse
-    tab1, tab2, tab3, tab4 = st.tabs(["📋 Cluster Overview", "📊 Grafici", "📥 Export", "📝 Tabella Completa"])
-    
-    with tab1:
-        st.markdown("### 🎯 Cluster Dettagliati")
+    # Download Excel
+    excel_buffer = BytesIO()
+    with pd.ExcelWriter(excel_buffer, engine='openpyxl') as writer:
+        # Sheet principale
+        df.to_excel(writer, sheet_name='Clusters', index=False)
         
-        for idx, cluster in enumerate(result['clusters'], 1):
-            st.markdown(f"""
-            <div class='cluster-box'>
-                <p class='cluster-title'>Cluster {idx}: {cluster['cluster_name']}</p>
-                <span class='cluster-intent'>{cluster['search_intent']}</span>
-                <p style='color: #cccccc; margin-top: 1rem;'>{cluster['description']}</p>
-                <p style='color: #999; font-size: 0.9em; margin-top: 0.5rem;'>
-                    <strong>{len(cluster['keywords'])}</strong> keywords in questo cluster
-                </p>
-                <div style='margin-top: 1rem;'>
-                    {"".join([f"<span class='keyword-pill'>{kw}</span>" for kw in cluster['keywords']])}
-                </div>
-            </div>
-            """, unsafe_allow_html=True)
-    
-    with tab2:
-        st.markdown("### 📊 Visualizzazioni")
-        
-        # Grafico 1: Distribuzione Search Intent
-        intent_counts = {
+        # Sheet summary
+        summary_df = pd.DataFrame([{
+            'Total Keywords': result['summary']['total_keywords'],
+            'Total Clusters': result['summary']['total_clusters'],
             'Commercial': result['summary']['commercial_clusters'],
             'Transactional': result['summary']['transactional_clusters'],
             'Informational': result['summary']['informational_clusters']
-        }
+        }])
+        summary_df.to_excel(writer, sheet_name='Summary', index=False)
         
-        fig_intent = go.Figure(data=[
-            go.Pie(
-                labels=list(intent_counts.keys()),
-                values=list(intent_counts.values()),
-                hole=0.4,
-                marker=dict(colors=['#FF6B35', '#F7931E', '#FFA500']),
-                textfont=dict(size=14, color='white')
-            )
-        ])
-        
-        fig_intent.update_layout(
-            title="Distribuzione Search Intent",
-            paper_bgcolor='rgba(0,0,0,0)',
-            plot_bgcolor='rgba(0,0,0,0)',
-            font=dict(color='white', size=12),
-            showlegend=True,
-            height=400
-        )
-        
-        st.plotly_chart(fig_intent, use_container_width=True)
-        
-        # Grafico 2: Keywords per cluster
-        cluster_sizes = [len(c['keywords']) for c in result['clusters']]
-        cluster_names = [c['cluster_name'][:30] + '...' if len(c['cluster_name']) > 30 else c['cluster_name'] 
-                        for c in result['clusters']]
-        
-        fig_sizes = go.Figure(data=[
-            go.Bar(
-                x=cluster_names,
-                y=cluster_sizes,
-                marker=dict(
-                    color=cluster_sizes,
-                    colorscale=[[0, '#FF6B35'], [1, '#F7931E']],
-                    line=dict(color='white', width=1)
-                ),
-                text=cluster_sizes,
-                textposition='outside',
-                textfont=dict(color='white', size=12)
-            )
-        ])
-        
-        fig_sizes.update_layout(
-            title="Keywords per Cluster",
-            xaxis_title="Cluster",
-            yaxis_title="Numero Keywords",
-            paper_bgcolor='rgba(0,0,0,0)',
-            plot_bgcolor='rgba(26,26,26,0.5)',
-            font=dict(color='white', size=12),
-            xaxis=dict(tickangle=-45),
-            height=400
-        )
-        
-        st.plotly_chart(fig_sizes, use_container_width=True)
-    
-    with tab3:
-        st.markdown("### 📥 Download Risultati")
-        
-        # Markdown export
-        markdown_output = f"# Keyword Clustering Report\n\n"
-        markdown_output += f"**Total Keywords:** {result['summary']['total_keywords']}\n\n"
-        markdown_output += f"**Total Clusters:** {result['summary']['total_clusters']}\n\n"
-        markdown_output += f"**Language:** {target_language}\n\n"
-        markdown_output += "---\n\n"
-        
+        # Sheet per cluster (dettaglio)
+        cluster_summary = []
         for idx, cluster in enumerate(result['clusters'], 1):
-            markdown_output += f"## Cluster {idx}: {cluster['cluster_name']}\n\n"
-            markdown_output += f"**Search Intent:** {cluster['search_intent']}\n\n"
-            markdown_output += f"**Description:** {cluster['description']}\n\n"
-            markdown_output += "**Keywords:**\n"
-            for kw in cluster['keywords']:
-                markdown_output += f"- {kw}\n"
-            markdown_output += "\n---\n\n"
+            cluster_summary.append({
+                'Cluster #': idx,
+                'Cluster Name': cluster['cluster_name'],
+                'Search Intent': cluster['search_intent'],
+                'Keywords Count': len(cluster['keywords']),
+                'Description': cluster['description']
+            })
         
-        # Excel export
-        excel_data = []
-        for cluster in result['clusters']:
-            for kw in cluster['keywords']:
-                excel_data.append({
-                    'Keyword': kw,
-                    'Cluster': cluster['cluster_name'],
-                    'Search Intent': cluster['search_intent'],
-                    'Description': cluster['description']
-                })
-        
-        df_export = pd.DataFrame(excel_data)
-        
-        # Buffer Excel
-        excel_buffer = BytesIO()
-        with pd.ExcelWriter(excel_buffer, engine='openpyxl') as writer:
-            df_export.to_excel(writer, sheet_name='Clusters', index=False)
-            
-            # Summary sheet
-            summary_df = pd.DataFrame([{
-                'Total Keywords': result['summary']['total_keywords'],
-                'Total Clusters': result['summary']['total_clusters'],
-                'Commercial': result['summary']['commercial_clusters'],
-                'Transactional': result['summary']['transactional_clusters'],
-                'Informational': result['summary']['informational_clusters']
-            }])
-            summary_df.to_excel(writer, sheet_name='Summary', index=False)
-        
-        excel_buffer.seek(0)
-        
-        # Bottoni download
-        col_d1, col_d2 = st.columns(2)
-        
-        with col_d1:
-            st.download_button(
-                label="📄 Download Markdown",
-                data=markdown_output,
-                file_name="keyword_clustering_report.md",
-                mime="text/markdown",
-                use_container_width=True
-            )
-        
-        with col_d2:
-            st.download_button(
-                label="📊 Download Excel",
-                data=excel_buffer,
-                file_name="keyword_clustering_report.xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                use_container_width=True
-            )
-        
-        # JSON export
-        json_output = json.dumps(result, indent=2, ensure_ascii=False)
-        st.download_button(
-            label="📋 Download JSON",
-            data=json_output,
-            file_name="keyword_clustering_report.json",
-            mime="application/json",
-            use_container_width=True
-        )
+        cluster_df = pd.DataFrame(cluster_summary)
+        cluster_df.to_excel(writer, sheet_name='Cluster Overview', index=False)
     
-    with tab4:
-        st.markdown("### 📝 Tabella Completa")
-        
-        # Crea dataframe dettagliato
-        table_data = []
-        for idx, cluster in enumerate(result['clusters'], 1):
-            for kw in cluster['keywords']:
-                table_data.append({
-                    'Cluster #': idx,
-                    'Cluster Name': cluster['cluster_name'],
-                    'Keyword': kw,
-                    'Search Intent': cluster['search_intent'],
-                    'Keywords in Cluster': len(cluster['keywords'])
-                })
-        
-        df_table = pd.DataFrame(table_data)
-        
-        st.dataframe(
-            df_table,
-            use_container_width=True,
-            height=400
-        )
-        
-        # CSV download
-        csv = df_table.to_csv(index=False).encode('utf-8')
-        st.download_button(
-            label="📥 Download CSV",
-            data=csv,
-            file_name="keyword_clustering_table.csv",
-            mime="text/csv",
-            use_container_width=True
-        )
-
-# Footer
-st.markdown("<br><br>", unsafe_allow_html=True)
-st.markdown("""
-<div style='text-align: center; padding: 2rem; border-top: 2px solid #FF6B35; color: #999;'>
-    <p style='font-size: 1em;'>
-        🧩 <strong style='color: #FF6B35;'>Keyword Clustering Expert</strong> | 
-        Powered by GPT-4 Turbo
-    </p>
-    <p style='font-size: 0.9em; margin-top: 0.5rem;'>
-        Parte di <strong style='color: #F7931E;'>Avantgrade Tools Suite</strong>
-    </p>
-</div>
-""", unsafe_allow_html=True)
+    excel_buffer.seek(0)
+    
+    st.download_button(
+        label="📥 Download Excel",
+        data=excel_buffer,
+        file_name=f"keyword_clustering_{time.strftime('%Y%m%d_%H%M%S')}.xlsx",
+        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        use_container_width=True
+    )
+    
+    st.markdown("---")
+    st.markdown(f"**Powered by GPT-5** • {result['summary']['total_keywords']} keywords • {result['summary']['total_clusters']} clusters")
