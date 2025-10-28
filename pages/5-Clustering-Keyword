@@ -14,7 +14,7 @@ st.set_page_config(
     layout="wide"
 )
 
-# CSS personalizzato
+# CSS personalizzato (identico agli altri tool)
 st.markdown("""
     <style>
     .stApp {
@@ -148,7 +148,7 @@ st.markdown("""
 <div class='tool-header'>
     <h1 style='color: white; margin: 0; font-size: 2.5em;'>🧩 Keyword Clustering Expert</h1>
     <p style='color: white; margin: 0.5rem 0 0 0; font-size: 1.2em; opacity: 0.95;'>
-        AI-Powered Semantic Keyword Grouping with GPT-4
+        AI-Powered Semantic Keyword Grouping with GPT-4 Turbo
     </p>
 </div>
 """, unsafe_allow_html=True)
