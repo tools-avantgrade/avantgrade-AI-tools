@@ -173,7 +173,7 @@ JSON only, no markdown."""
                     {"role": "user", "content": prompt}
                 ],
                 temperature=0.2,
-                max_tokens=8000
+                max_completion_tokens=8000
             )
             
             result_text = response.choices[0].message.content.strip()
