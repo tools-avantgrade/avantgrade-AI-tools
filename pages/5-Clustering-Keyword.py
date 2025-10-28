@@ -143,16 +143,19 @@ def cluster_keywords_gpt5(keywords_list, api_key, language, min_size, max_cluste
                 st.text(f"Batch {batch_idx + 1}/{total_batches}: keywords {start_idx+1}-{end_idx}")
             
             # Prompt ottimizzato per GPT-5
-            prompt = f"""Analyze and cluster these {len(batch_keywords)} keywords in {language}.
+            prompt = f"""You are an SEO keyword clustering expert. Analyze these {len(batch_keywords)} keywords in {language}.
 
-Keywords:
-{chr(10).join(f"- {kw}" for kw in batch_keywords)}
+KEYWORDS:
+{chr(10).join(batch_keywords)}
 
+TASK:
 Create {min(max_clusters, len(batch_keywords)//min_size)} semantic clusters.
-Each cluster needs at least {min_size} keywords.
+Minimum {min_size} keywords per cluster.
 Classify search intent: Commercial, Transactional, or Informational.
 
-Return valid JSON:
+CRITICAL: Return ONLY valid JSON, nothing else. No explanations, no markdown, no text before or after.
+
+JSON STRUCTURE:
 {{
   "clusters": [
     {{
@@ -164,27 +167,51 @@ Return valid JSON:
   ]
 }}
 
-JSON only, no markdown."""
+Return the JSON now:"""
 
             response = client.chat.completions.create(
                 model="gpt-5",  # GPT-5 (gpt-5-thinking)
                 messages=[
-                    {"role": "system", "content": "You are an SEO keyword clustering expert. Return only valid JSON."},
+                    {"role": "system", "content": "You are an SEO keyword clustering expert. You ONLY output valid JSON, nothing else."},
                     {"role": "user", "content": prompt}
                 ],
+                response_format={"type": "json_object"},  # Forza output JSON
                 max_completion_tokens=8000
             )
             
-            result_text = response.choices[0].message.content.strip()
+            result_text = response.choices[0].message.content
             
-            # Clean markdown
+            if not result_text or result_text.strip() == "":
+                return None, "GPT-5 ha restituito una risposta vuota. Riprova o riduci il numero di keywords."
+            
+            result_text = result_text.strip()
+            
+            # Clean markdown code blocks
             if result_text.startswith("```"):
-                result_text = result_text.split("```")[1]
-                if result_text.startswith("json"):
-                    result_text = result_text[4:]
-                result_text = result_text.strip()
+                parts = result_text.split("```")
+                if len(parts) >= 2:
+                    result_text = parts[1]
+                    if result_text.startswith("json"):
+                        result_text = result_text[4:]
+                    result_text = result_text.strip()
             
-            batch_result = json.loads(result_text)
+            # Remove any leading/trailing text before/after JSON
+            # Find first { and last }
+            start_idx = result_text.find("{")
+            end_idx = result_text.rfind("}")
+            
+            if start_idx == -1 or end_idx == -1:
+                # Debug: mostra cosa ha restituito GPT-5
+                st.error(f"Risposta GPT-5 non contiene JSON valido. Preview: {result_text[:200]}...")
+                return None, "GPT-5 non ha restituito JSON valido. Riprova."
+            
+            result_text = result_text[start_idx:end_idx+1]
+            
+            try:
+                batch_result = json.loads(result_text)
+            except json.JSONDecodeError as e:
+                st.error(f"Errore parsing JSON batch {batch_idx+1}. Preview: {result_text[:200]}...")
+                return None, f"Errore parsing JSON: {str(e)}"
             all_clusters.extend(batch_result['clusters'])
         
         # Merge e calcola summary
