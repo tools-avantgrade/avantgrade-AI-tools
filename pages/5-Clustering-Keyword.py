@@ -93,10 +93,17 @@ with st.sidebar:
         10, 50, 20
     )
     
+    batch_size_option = st.selectbox(
+        "Batch size (keywords)",
+        [250, 500, 1000],
+        index=1,
+        help="Riduci se hai rate limit errors"
+    )
+    
     st.markdown("---")
     st.markdown("**Modello:** Claude Sonnet 4.5")
     st.markdown("**Max keywords:** 5000+")
-    st.markdown("**Context:** 200K tokens")
+    st.markdown("**⚠️ Rate limit:** 60s delay tra batch")
 
 # Input
 st.markdown("### 📝 Input Keywords")
@@ -110,18 +117,17 @@ keywords_input = st.text_area(
 
 st.markdown("""
 <div class='info-box'>
-💡 <strong>Claude Sonnet 4.5:</strong> Gestisce fino a 5000+ keywords con output completi.
-Batch da 1000 keywords per garantire precisione.
+💡 <strong>Rate Limit Management:</strong> Il tool gestisce automaticamente i rate limit di Claude
+con pause di 60s tra i batch. Per 3000 keywords (~6 batch) ci vogliono circa 6-7 minuti.
 </div>
 """, unsafe_allow_html=True)
 
 analyze_btn = st.button("🚀 Analizza Keywords", use_container_width=True)
 
 # Funzione clustering
-def cluster_keywords_claude(keywords_list, api_key, language, min_size, max_clusters):
+def cluster_keywords_claude(keywords_list, api_key, language, min_size, max_clusters, batch_size=500):
     try:
         client = Anthropic(api_key=api_key)
-        batch_size = 1000
         all_clusters = []
         total_batches = (len(keywords_list) + batch_size - 1) // batch_size
         
@@ -162,11 +168,35 @@ Return ONLY valid JSON:
   ]
 }}"""
 
-            response = client.messages.create(
-                model="claude-sonnet-4-20250514",
-                max_tokens=16000,
-                messages=[{"role": "user", "content": prompt}]
-            )
+            # Retry logic per rate limits
+            max_retries = 3
+            retry_count = 0
+            
+            while retry_count < max_retries:
+                try:
+                    response = client.messages.create(
+                        model="claude-sonnet-4-20250514",
+                        max_tokens=8000,  # Ridotto da 16000 per rate limit
+                        messages=[{"role": "user", "content": prompt}]
+                    )
+                    break  # Success, exit retry loop
+                    
+                except Exception as e:
+                    if "rate_limit" in str(e).lower():
+                        retry_count += 1
+                        if retry_count < max_retries:
+                            wait_time = 60 * retry_count  # 60s, 120s, 180s
+                            st.warning(f"⏳ Rate limit raggiunto. Attesa {wait_time}s prima di riprovare (tentativo {retry_count}/{max_retries})...")
+                            time.sleep(wait_time)
+                        else:
+                            return None, f"Rate limit superato dopo {max_retries} tentativi. Attendi qualche minuto e riprova."
+                    else:
+                        return None, f"Errore API: {str(e)}"
+            
+            # Delay tra batch per evitare rate limit
+            if batch_idx < total_batches - 1:  # Non aspettare dopo l'ultimo batch
+                st.info("⏱️ Pausa 60s per rispettare rate limit...")
+                time.sleep(60)
             
             result_text = response.content[0].text.strip()
             
@@ -248,7 +278,8 @@ if analyze_btn:
                     api_key,
                     language,
                     min_cluster_size,
-                    max_clusters
+                    max_clusters,
+                    batch_size_option
                 )
                 
                 progress.progress(100)
