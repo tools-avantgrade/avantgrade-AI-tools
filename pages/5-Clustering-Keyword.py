@@ -63,7 +63,7 @@ st.markdown("""
 
 # Header minimale
 st.title("🧩 Keyword Clustering Expert")
-st.markdown("**AI-powered semantic grouping con GPT-5**")
+st.markdown("**AI-powered semantic grouping con GPT-4 Turbo**")
 st.markdown("---")
 
 # Sidebar minimale
@@ -94,7 +94,7 @@ with st.sidebar:
     )
     
     st.markdown("---")
-    st.markdown("**Modello:** GPT-5 (gpt-5)")
+    st.markdown("**Modello:** GPT-4 Turbo")
     st.markdown("**Max keywords:** 3000+")
 
 # Input area principale
@@ -118,10 +118,10 @@ dividendole in batch per ottimizzare performance e costi.
 # Bottone analisi
 analyze_btn = st.button("🚀 Analizza Keywords", use_container_width=True)
 
-# Funzione clustering con GPT-5
-def cluster_keywords_gpt5(keywords_list, api_key, language, min_size, max_clusters):
+# Funzione clustering con GPT-4 Turbo
+def cluster_keywords_gpt4(keywords_list, api_key, language, min_size, max_clusters):
     """
-    Clustering con GPT-5 (gpt-5) - supporto liste grandi con batching
+    Clustering con GPT-4 Turbo - supporto liste grandi con batching
     """
     try:
         client = OpenAI(api_key=api_key)
@@ -142,41 +142,44 @@ def cluster_keywords_gpt5(keywords_list, api_key, language, min_size, max_cluste
             if total_batches > 1:
                 st.text(f"Batch {batch_idx + 1}/{total_batches}: keywords {start_idx+1}-{end_idx}")
             
-            # Prompt ottimizzato per GPT-5
-            prompt = f"""You are an SEO keyword clustering expert. Analyze these {len(batch_keywords)} keywords in {language}.
+            # Prompt ottimizzato per GPT-4 Turbo
+            prompt = f"""You are a professional SEO keyword clustering expert.
+
+Analyze these {len(batch_keywords)} keywords in {language} and group them into semantic clusters.
 
 KEYWORDS:
-{chr(10).join(batch_keywords)}
+{chr(10).join(f"- {kw}" for kw in batch_keywords)}
 
-TASK:
-Create {min(max_clusters, len(batch_keywords)//min_size)} semantic clusters.
-Minimum {min_size} keywords per cluster.
-Classify search intent: Commercial, Transactional, or Informational.
+INSTRUCTIONS:
+1. Create between 3 and {min(max_clusters, len(batch_keywords)//min_size)} semantic clusters
+2. Each cluster should contain at least {min_size} keywords (if possible)
+3. Identify the main theme/topic for each cluster
+4. Classify the search intent for each cluster as: Commercial, Transactional, or Informational
+5. Group keywords that have semantic relationships and similar user search intent
 
-CRITICAL: Return ONLY valid JSON, nothing else. No explanations, no markdown, no text before or after.
-
-JSON STRUCTURE:
+Return ONLY a valid JSON object with this exact structure (no markdown, no code blocks, just raw JSON):
 {{
   "clusters": [
     {{
-      "cluster_name": "string",
+      "cluster_name": "Clear descriptive name for the cluster",
       "search_intent": "Commercial|Transactional|Informational",
-      "keywords": ["kw1", "kw2"],
-      "description": "string"
+      "keywords": ["keyword1", "keyword2", "keyword3"],
+      "description": "Brief explanation of why these keywords are grouped together"
     }}
   ]
 }}
 
-Return the JSON now:"""
+CRITICAL: Return ONLY the JSON object, no additional text, no markdown formatting, no code blocks."""
 
             response = client.chat.completions.create(
-                model="gpt-5",  # GPT-5 (gpt-5-thinking)
+                model="gpt-4-turbo-preview",  # GPT-4 Turbo (stabile e affidabile)
                 messages=[
-                    {"role": "system", "content": "You are an SEO keyword clustering expert. You ONLY output valid JSON, nothing else."},
+                    {"role": "system", "content": "You are a professional SEO keyword clustering expert. You ONLY respond with valid JSON, nothing else."},
                     {"role": "user", "content": prompt}
                 ],
-                response_format={"type": "json_object"},  # Forza output JSON
-                max_completion_tokens=8000
+                temperature=0.3,
+                max_tokens=8000,
+                response_format={"type": "json_object"}
             )
             
             result_text = response.choices[0].message.content
@@ -248,11 +251,11 @@ if analyze_btn:
             st.warning("⚠️ Minimo 3 keywords richieste")
         else:
             # Progress
-            with st.spinner(f'🤖 Clustering {len(keywords_list)} keywords con GPT-5...'):
+            with st.spinner(f'🤖 Clustering {len(keywords_list)} keywords con GPT-4 Turbo...'):
                 progress = st.progress(0)
                 
                 progress.progress(30)
-                result, error = cluster_keywords_gpt5(
+                result, error = cluster_keywords_gpt4(
                     keywords_list,
                     api_key,
                     language,
@@ -351,4 +354,4 @@ if 'clustering_results' in st.session_state:
     )
     
     st.markdown("---")
-    st.markdown(f"**Powered by GPT-5** • {result['summary']['total_keywords']} keywords • {result['summary']['total_clusters']} clusters")
+    st.markdown(f"**Powered by GPT-4 Turbo** • {result['summary']['total_keywords']} keywords • {result['summary']['total_clusters']} clusters")
