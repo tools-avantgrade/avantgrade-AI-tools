@@ -172,7 +172,6 @@ JSON only, no markdown."""
                     {"role": "system", "content": "You are an SEO keyword clustering expert. Return only valid JSON."},
                     {"role": "user", "content": prompt}
                 ],
-                temperature=0.2,
                 max_completion_tokens=8000
             )
             
