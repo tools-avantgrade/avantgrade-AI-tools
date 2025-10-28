@@ -147,29 +147,31 @@ def cluster_keywords_gpt4(keywords_list, api_key, language, min_size, max_cluste
 
 Analyze these {len(batch_keywords)} keywords in {language} and group them into semantic clusters.
 
-KEYWORDS:
-{chr(10).join(f"- {kw}" for kw in batch_keywords)}
+KEYWORDS TO CLUSTER:
+{chr(10).join(f"{i+1}. {kw}" for i, kw in enumerate(batch_keywords))}
 
-INSTRUCTIONS:
-1. Create between 3 and {min(max_clusters, len(batch_keywords)//min_size)} semantic clusters
-2. Each cluster should contain at least {min_size} keywords (if possible)
-3. Identify the main theme/topic for each cluster
-4. Classify the search intent for each cluster as: Commercial, Transactional, or Informational
-5. Group keywords that have semantic relationships and similar user search intent
+CRITICAL RULES:
+1. Create between 5 and {min(max_clusters, len(batch_keywords)//min_size + 5)} semantic clusters
+2. EVERY SINGLE KEYWORD MUST BE ASSIGNED TO A CLUSTER (all {len(batch_keywords)} keywords)
+3. Each cluster should ideally contain at least {min_size} keywords, but can have less if needed
+4. Classify search intent: Commercial, Transactional, or Informational
+5. Group keywords by semantic relationships and user search intent
 
-Return ONLY a valid JSON object with this exact structure (no markdown, no code blocks, just raw JSON):
+VALIDATION: Count the total keywords in your output - it MUST equal {len(batch_keywords)}.
+
+Return ONLY a valid JSON object (no markdown, no code blocks):
 {{
   "clusters": [
     {{
-      "cluster_name": "Clear descriptive name for the cluster",
+      "cluster_name": "Clear descriptive name",
       "search_intent": "Commercial|Transactional|Informational",
-      "keywords": ["keyword1", "keyword2", "keyword3"],
-      "description": "Brief explanation of why these keywords are grouped together"
+      "keywords": ["keyword1", "keyword2", ...],
+      "description": "Why these keywords are grouped together"
     }}
   ]
 }}
 
-CRITICAL: Return ONLY the JSON object, no additional text, no markdown formatting, no code blocks."""
+Return the JSON now:"""
 
             response = client.chat.completions.create(
                 model="gpt-4-turbo-preview",  # GPT-4 Turbo (stabile e affidabile)
@@ -215,11 +217,25 @@ CRITICAL: Return ONLY the JSON object, no additional text, no markdown formattin
             except json.JSONDecodeError as e:
                 st.error(f"Errore parsing JSON batch {batch_idx+1}. Preview: {result_text[:200]}...")
                 return None, f"Errore parsing JSON: {str(e)}"
+            
+            # Validazione batch
+            batch_kw_count = sum(len(c['keywords']) for c in batch_result['clusters'])
+            if batch_kw_count < len(batch_keywords):
+                st.warning(f"⚠️ Batch {batch_idx+1}: solo {batch_kw_count}/{len(batch_keywords)} keyword clusterizzate")
+            
             all_clusters.extend(batch_result['clusters'])
         
         # Merge e calcola summary
+        total_clustered = sum(len(cluster['keywords']) for cluster in all_clusters)
+        
+        # WARNING: se mancano keyword
+        if total_clustered < len(keywords_list):
+            missing = len(keywords_list) - total_clustered
+            st.warning(f"⚠️ Attenzione: {missing} keyword non sono state clusterizzate. Prova ad aumentare 'Max clusters' o ridurre 'Min keywords per cluster'.")
+        
         summary = {
-            "total_keywords": len(keywords_list),
+            "total_keywords": total_clustered,  # Usa il conteggio reale
+            "total_keywords_input": len(keywords_list),  # Keyword originali
             "total_clusters": len(all_clusters),
             "commercial_clusters": sum(1 for c in all_clusters if c['search_intent'] == 'Commercial'),
             "transactional_clusters": sum(1 for c in all_clusters if c['search_intent'] == 'Transactional'),
@@ -276,7 +292,8 @@ if analyze_btn:
                 st.markdown(f"""
                 <div class='success-box'>
                 ✅ <strong>Analisi completata!</strong><br>
-                • {result['summary']['total_keywords']} keywords analizzate<br>
+                • {result['summary']['total_keywords_input']} keywords inviate<br>
+                • {result['summary']['total_keywords']} keywords clusterizzate<br>
                 • {result['summary']['total_clusters']} cluster creati<br>
                 • {result['summary']['commercial_clusters']} Commercial | {result['summary']['transactional_clusters']} Transactional | {result['summary']['informational_clusters']} Informational
                 </div>
