@@ -349,13 +349,20 @@ with st.sidebar:
     - 🔍 SERP Analyzer
     - 🤖 Query Fan-Out
     - 🕷️ Competitor Content Analyzer
-    - 🧩 Keyword Clustering Expert
+    - 🧩 Keyword Clustering Expert ✨ NEW
     
     **Coming Soon:**
     - 📊 Keyword Research
     - 🎯 Content Optimizer
     - 📈 Analytics Dashboard
     - 🔗 Backlink Checker
+    
+    ---
+    
+    **💡 Novità:**
+    Il nuovo **Keyword Clustering Expert** 
+    usa GPT-4 per raggruppare le tue 
+    keyword per search intent semantico!
     
     ---
     
