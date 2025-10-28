@@ -8,6 +8,10 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
+# Inizializza session state
+if 'page' not in st.session_state:
+    st.session_state.page = 'home'
+
 # CSS personalizzato
 st.markdown("""
     <style>
@@ -343,29 +347,72 @@ st.markdown("""
 
 # Sidebar Info
 with st.sidebar:
-    st.markdown("## 📚 Guida Rapida")
+    st.markdown("## 🏠 Avantgrade Tools Suite")
+    st.markdown("---")
+    
+    st.markdown("### ✅ Strumenti Attivi")
     st.markdown("""
-    **Strumenti Attivi:**
-    - 🔍 SERP Analyzer
-    - 🤖 Query Fan-Out
-    - 🕷️ Competitor Content Analyzer
-    - 🧩 Keyword Clustering Expert ✨ NEW
+    <div style='background: rgba(255, 107, 53, 0.1); padding: 1rem; border-radius: 8px; border-left: 3px solid #FF6B35; margin-bottom: 1rem;'>
+        <p style='margin: 0.3rem 0; color: #fff;'>🔍 <strong>SERP Analyzer</strong></p>
+        <p style='margin: 0.3rem 0; color: #fff;'>🤖 <strong>Query Fan-Out</strong></p>
+        <p style='margin: 0.3rem 0; color: #fff;'>🕷️ <strong>Competitor Analyzer</strong></p>
+        <p style='margin: 0.3rem 0; color: #fff;'>🧩 <strong>Keyword Clustering</strong> <span style='background: linear-gradient(135deg, #FF6B35, #F7931E); padding: 0.2rem 0.5rem; border-radius: 10px; font-size: 0.75em; font-weight: bold;'>NEW</span></p>
+    </div>
+    """, unsafe_allow_html=True)
     
-    **Coming Soon:**
-    - 📊 Keyword Research
-    - 🎯 Content Optimizer
-    - 📈 Analytics Dashboard
-    - 🔗 Backlink Checker
+    st.markdown("### ⏳ In Sviluppo")
+    st.markdown("""
+    <div style='background: rgba(102, 102, 102, 0.1); padding: 1rem; border-radius: 8px; border-left: 3px solid #666; margin-bottom: 1rem;'>
+        <p style='margin: 0.3rem 0; color: #999;'>📊 Keyword Research</p>
+        <p style='margin: 0.3rem 0; color: #999;'>🎯 Content Optimizer</p>
+        <p style='margin: 0.3rem 0; color: #999;'>📈 Analytics Dashboard</p>
+        <p style='margin: 0.3rem 0; color: #999;'>🔗 Backlink Checker</p>
+    </div>
+    """, unsafe_allow_html=True)
     
-    ---
+    st.markdown("---")
     
-    **💡 Novità:**
-    Il nuovo **Keyword Clustering Expert** 
-    usa GPT-4 per raggruppare le tue 
-    keyword per search intent semantico!
+    st.markdown("### 💡 Tool Spotlight")
+    st.markdown("""
+    <div style='background: linear-gradient(135deg, rgba(255, 107, 53, 0.2), rgba(247, 147, 30, 0.2)); padding: 1rem; border-radius: 10px; border: 2px solid #FF6B35;'>
+        <h4 style='color: #FF6B35; margin-top: 0;'>🧩 Keyword Clustering</h4>
+        <p style='color: #ccc; font-size: 0.9em; line-height: 1.5;'>
+            Nuovo tool AI-powered! Raggruppa automaticamente le keyword per search intent usando <strong>GPT-4 Turbo</strong>.
+        </p>
+        <p style='color: #F7931E; font-size: 0.85em; margin-bottom: 0;'>
+            👉 Selezionalo dalla sidebar sopra!
+        </p>
+    </div>
+    """, unsafe_allow_html=True)
     
-    ---
+    st.markdown("---")
     
-    **Supporto:**
-    Per assistenza contatta il team Avantgrade
-    """)
+    st.markdown("### 📚 Come Usare")
+    st.markdown("""
+    <div style='color: #ccc; font-size: 0.9em;'>
+        <p><strong style='color: #FF6B35;'>1.</strong> Seleziona un tool dalla lista sopra</p>
+        <p><strong style='color: #FF6B35;'>2.</strong> Inserisci i parametri richiesti</p>
+        <p><strong style='color: #FF6B35;'>3.</strong> Analizza i risultati</p>
+        <p><strong style='color: #FF6B35;'>4.</strong> Scarica i report</p>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    st.markdown("---")
+    
+    st.markdown("### 🔑 API Keys Richieste")
+    st.markdown("""
+    <div style='color: #999; font-size: 0.85em;'>
+        <p>• <strong>SerpAPI</strong> - SERP Analyzer</p>
+        <p>• <strong>Google Gemini</strong> - Query Fan-Out</p>
+        <p>• <strong>OpenAI</strong> - Keyword Clustering</p>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    st.markdown("---")
+    
+    st.markdown("""
+    <div style='text-align: center; color: #666; font-size: 0.8em;'>
+        <p style='margin: 0;'>🚀 Avantgrade Tools v2.0</p>
+        <p style='margin: 0.5rem 0 0 0;'>4 Tools Attivi</p>
+    </div>
+    """, unsafe_allow_html=True)
