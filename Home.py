@@ -244,6 +244,18 @@ with col3:
     
     st.markdown("""
     <div class='tool-card'>
+        <div class='tool-icon'>🧩</div>
+        <h2 class='tool-title'>Keyword Clustering Expert</h2>
+        <p class='tool-description'>
+            Raggruppa automaticamente le keyword per search intent semantico.
+            AI-powered clustering con GPT-5 per strategie di contenuto mirate.
+        </p>
+        <span class='tool-status status-active'>✓ ATTIVO</span>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    st.markdown("""
+    <div class='tool-card'>
         <div class='tool-icon'>🔗</div>
         <h2 class='tool-title'>Backlink Checker</h2>
         <p class='tool-description'>
@@ -253,7 +265,11 @@ with col3:
         <span class='tool-status status-coming'>⏳ COMING SOON</span>
     </div>
     """, unsafe_allow_html=True)
-    
+
+# Seconda riga tools
+col4, col5, col6 = st.columns(3)
+
+with col4:
     st.markdown("""
     <div class='tool-card'>
         <div class='tool-icon'>📈</div>
@@ -333,6 +349,7 @@ with st.sidebar:
     - 🔍 SERP Analyzer
     - 🤖 Query Fan-Out
     - 🕷️ Competitor Content Analyzer
+    - 🧩 Keyword Clustering Expert
     
     **Coming Soon:**
     - 📊 Keyword Research
