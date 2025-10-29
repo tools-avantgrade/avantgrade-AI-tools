@@ -8,7 +8,7 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# CSS ultra-minimale
+# CSS ultra-minimale con cards cliccabili
 st.markdown("""
     <style>
     .stApp {
@@ -26,8 +26,7 @@ st.markdown("""
     
     .hero {
         text-align: center;
-        padding: 3rem 1rem;
-        margin-bottom: 2rem;
+        padding: 3rem 1rem 2rem 1rem;
     }
     
     .hero h1 {
@@ -43,28 +42,25 @@ st.markdown("""
         margin: 1rem 0 0 0;
     }
     
-    .tool-grid {
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-        gap: 1.5rem;
-        margin: 2rem 0;
-    }
-    
     .tool-card {
         background: #0a0a0a;
         border: 1px solid #FF6B35;
         border-radius: 8px;
         padding: 1.5rem;
-        transition: border-color 0.3s;
+        margin: 1rem 0;
+        transition: all 0.3s;
+        cursor: pointer;
     }
     
     .tool-card:hover {
         border-color: #F7931E;
+        background: #111;
+        transform: translateY(-2px);
     }
     
     .tool-card h3 {
         color: #FF6B35;
-        font-size: 1.3em;
+        font-size: 1.4em;
         margin: 0 0 0.5rem 0;
     }
     
@@ -75,25 +71,6 @@ st.markdown("""
         margin: 0;
     }
     
-    .status {
-        display: inline-block;
-        padding: 0.2rem 0.6rem;
-        border-radius: 4px;
-        font-size: 0.75em;
-        font-weight: bold;
-        margin-top: 0.5rem;
-    }
-    
-    .active {
-        background: #00ff88;
-        color: #000;
-    }
-    
-    .coming {
-        background: #333;
-        color: #999;
-    }
-    
     .footer {
         text-align: center;
         padding: 2rem 1rem;
@@ -102,6 +79,14 @@ st.markdown("""
         color: #666;
         font-size: 0.9em;
     }
+    
+    /* Hide default streamlit button styling */
+    .stButton>button {
+        all: unset;
+        display: block;
+        width: 100%;
+        cursor: pointer;
+    }
     </style>
 """, unsafe_allow_html=True)
 
@@ -109,82 +94,62 @@ st.markdown("""
 st.markdown("""
 <div class='hero'>
     <h1>AvantGrade.com Tools</h1>
-    <p>SEO & Digital Marketing Suite</p>
+    <p>Professional SEO & Digital Marketing Suite</p>
 </div>
 """, unsafe_allow_html=True)
 
-# Tools Grid
-col1, col2, col3 = st.columns(3)
+st.markdown("<br>", unsafe_allow_html=True)
+
+# Tools Grid - 4 tool attivi
+col1, col2 = st.columns(2)
 
 with col1:
+    # SERP Analyzer
+    if st.button("serp_analyzer", key="serp", use_container_width=True):
+        st.switch_page("pages/1-SERP-Analyzer.py")
+    
     st.markdown("""
-    <div class='tool-card'>
+    <div class='tool-card' onclick='document.querySelector("[data-testid=\\"baseButton-secondary\\"][key=\\"serp\\"]").click()'>
         <h3>🔍 SERP Analyzer</h3>
-        <p>Extract up to 100 organic URLs from Google SERP with real-time data</p>
-        <span class='status active'>ACTIVE</span>
+        <p>Extract up to 100 organic URLs from Google SERP with real-time data and export to Excel</p>
     </div>
     """, unsafe_allow_html=True)
     
+    st.markdown("<br>", unsafe_allow_html=True)
+    
+    # Competitor Analyzer
+    if st.button("competitor_analyzer", key="competitor", use_container_width=True):
+        st.switch_page("pages/4-Competitor-Content-Analyzer.py")
+    
     st.markdown("""
-    <div class='tool-card'>
-        <h3>📊 Keyword Research</h3>
-        <p>Discover keyword opportunities with volume, difficulty and trends</p>
-        <span class='status coming'>COMING SOON</span>
+    <div class='tool-card' onclick='document.querySelector("[data-testid=\\"baseButton-secondary\\"][key=\\"competitor\\"]").click()'>
+        <h3>🕷️ Competitor Content Analyzer</h3>
+        <p>Extract HTML tags, metadata, images and complete SEO structure from competitor URLs</p>
     </div>
     """, unsafe_allow_html=True)
 
 with col2:
+    # Query Fan-Out
+    if st.button("query_fanout", key="fanout", use_container_width=True):
+        st.switch_page("pages/3-Query-Fan-Out-Simulator.py")
+    
     st.markdown("""
-    <div class='tool-card'>
-        <h3>🤖 Query Fan-Out</h3>
-        <p>Expand queries into intelligent variants using Gemini AI</p>
-        <span class='status active'>ACTIVE</span>
+    <div class='tool-card' onclick='document.querySelector("[data-testid=\\"baseButton-secondary\\"][key=\\"fanout\\"]").click()'>
+        <h3>🤖 Query Fan-Out Simulator</h3>
+        <p>Expand single queries into intelligent variants using Gemini AI for keyword research</p>
     </div>
     """, unsafe_allow_html=True)
     
-    st.markdown("""
-    <div class='tool-card'>
-        <h3>🎯 Content Optimizer</h3>
-        <p>Optimize content with readability analysis and SEO suggestions</p>
-        <span class='status coming'>COMING SOON</span>
-    </div>
-    """, unsafe_allow_html=True)
-
-with col3:
-    st.markdown("""
-    <div class='tool-card'>
-        <h3>🕷️ Competitor Analyzer</h3>
-        <p>Extract HTML tags, metadata and SEO structure from competitors</p>
-        <span class='status active'>ACTIVE</span>
-    </div>
-    """, unsafe_allow_html=True)
+    st.markdown("<br>", unsafe_allow_html=True)
+    
+    # Keyword Clustering
+    if st.button("clustering", key="cluster", use_container_width=True):
+        st.switch_page("pages/5-Keyword-Clustering-Expert.py")
     
     st.markdown("""
-    <div class='tool-card'>
-        <h3>🧩 Keyword Clustering</h3>
-        <p>AI-powered semantic clustering with Claude Sonnet 4.5</p>
-        <span class='status active'>ACTIVE</span>
-    </div>
-    """, unsafe_allow_html=True)
-
-# Second row
-col4, col5, col6 = st.columns(3)
-
-with col4:
-    st.markdown("""
-    <div class='tool-card'>
-        <h3>🔗 Backlink Checker</h3>
-        <p>Monitor backlink profile and analyze link quality</p>
-        <span class='status coming'>COMING SOON</span>
-    </div>
-    """, unsafe_allow_html=True)
-
-with col5:
-    st.markdown("""
-    <div class='tool-card'>
-        <h3>📈 Analytics Dashboard</h3>
-        <p>Centralized dashboard for SEO performance monitoring</p>
-        <span class='status coming'>COMING SOON</span>
+    <div class='tool-card' onclick='document.querySelector("[data-testid=\\"baseButton-secondary\\"][key=\\"cluster\\"]").click()'>
+        <h3>🧩 Keyword Clustering Expert</h3>
+        <p>AI-powered semantic keyword clustering with Claude Sonnet 4.5 - supports 5000+ keywords</p>
     </div>
     """, unsafe_allow_html=True)
 
@@ -201,47 +166,40 @@ with st.sidebar:
     st.markdown("### 🏠 AvantGrade.com")
     st.markdown("---")
     
-    st.markdown("### ✅ Active Tools")
+    st.markdown("### ✅ Active Tools (4)")
     st.markdown("""
+**Click any tool to start:**
+
 - 🔍 SERP Analyzer
-- 🤖 Query Fan-Out
-- 🕷️ Competitor Analyzer
-- 🧩 Keyword Clustering **NEW**
-    """)
-    
-    st.markdown("### ⏳ Coming Soon")
-    st.markdown("""
-- 📊 Keyword Research
-- 🎯 Content Optimizer
-- 📈 Analytics Dashboard
-- 🔗 Backlink Checker
+- 🤖 Query Fan-Out Simulator
+- 🕷️ Competitor Content Analyzer
+- 🧩 Keyword Clustering Expert
     """)
     
     st.markdown("---")
     
-    st.markdown("### 🔑 API Keys")
+    st.markdown("### 🔑 Required API Keys")
     st.markdown("""
-**Required:**
-- SerpAPI → SERP Analyzer
-- Gemini → Query Fan-Out
-- Anthropic → Keyword Clustering
+- **SerpAPI** → SERP Analyzer
+- **Google Gemini** → Query Fan-Out
+- **Anthropic Claude** → Keyword Clustering
     """)
     
     st.markdown("---")
     
     st.markdown("### 📚 Quick Start")
     st.markdown("""
-1. Select tool from sidebar
-2. Insert parameters
-3. Analyze results
-4. Download reports
+1. Click a tool card above
+2. Insert required parameters
+3. Run analysis
+4. Download results
     """)
     
     st.markdown("---")
     
     st.markdown("""
 <div style='text-align: center; color: #666; font-size: 0.85em;'>
-<p>AvantGrade.com v2.0</p>
-<p>4 Active Tools</p>
+<p><strong>AvantGrade.com</strong></p>
+<p>v2.0 • 4 Tools</p>
 </div>
     """, unsafe_allow_html=True)
