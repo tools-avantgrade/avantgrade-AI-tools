@@ -67,7 +67,15 @@ st.markdown("""
         color: #999;
         font-size: 0.95em;
         line-height: 1.5;
-        margin: 0 0 1rem 0;
+        margin: 0;
+    }
+    
+    .info-note {
+        background: #1a1a1a;
+        border-left: 3px solid #F7931E;
+        padding: 1rem;
+        margin: 2rem 0;
+        color: #ccc;
     }
     
     .footer {
@@ -77,22 +85,6 @@ st.markdown("""
         border-top: 1px solid #FF6B35;
         color: #666;
         font-size: 0.9em;
-    }
-    
-    .stButton>button {
-        background: transparent;
-        border: none;
-        color: #FF6B35;
-        padding: 0.5rem 1rem;
-        font-weight: 600;
-        font-size: 0.9em;
-        cursor: pointer;
-        transition: color 0.3s;
-    }
-    
-    .stButton>button:hover {
-        color: #F7931E;
-        background: transparent;
     }
     </style>
 """, unsafe_allow_html=True)
@@ -107,12 +99,12 @@ st.markdown("""
 
 st.markdown("<br>", unsafe_allow_html=True)
 
-# NOTA: I tuoi file devono chiamarsi con underscore per funzionare con st.switch_page()
-# Rinomina i file da:
-# 1-SERP-Analyzer.py → 1_SERP_Analyzer.py
-# 3-Query-Fan-Out-Simulator.py → 3_Query_Fan_Out_Simulator.py
-# 4-Competitor-Content-Analyzer.py → 4_Competitor_Content_Analyzer.py
-# 5-Keyword-Clustering-Expert.py → 5_Keyword_Clustering_Expert.py
+# Info box
+st.markdown("""
+<div class='info-note'>
+    👈 <strong>Select a tool from the sidebar</strong> to get started
+</div>
+""", unsafe_allow_html=True)
 
 # Tools Grid - 4 tool attivi
 col1, col2 = st.columns(2)
@@ -126,9 +118,6 @@ with col1:
     </div>
     """, unsafe_allow_html=True)
     
-    if st.button("→ Open SERP Analyzer", key="serp", use_container_width=True):
-        st.switch_page("pages/1_SERP_Analyzer.py")
-    
     st.markdown("<br>", unsafe_allow_html=True)
     
     # Competitor Analyzer
@@ -138,9 +127,6 @@ with col1:
         <p>Extract HTML tags, metadata, images and complete SEO structure from competitor URLs</p>
     </div>
     """, unsafe_allow_html=True)
-    
-    if st.button("→ Open Competitor Analyzer", key="competitor", use_container_width=True):
-        st.switch_page("pages/4_Competitor_Content_Analyzer.py")
 
 with col2:
     # Query Fan-Out
@@ -151,9 +137,6 @@ with col2:
     </div>
     """, unsafe_allow_html=True)
     
-    if st.button("→ Open Query Fan-Out", key="fanout", use_container_width=True):
-        st.switch_page("pages/3_Query_Fan_Out_Simulator.py")
-    
     st.markdown("<br>", unsafe_allow_html=True)
     
     # Keyword Clustering
@@ -163,9 +146,6 @@ with col2:
         <p>AI-powered semantic keyword clustering with Claude Sonnet 4.5 - supports 5000+ keywords</p>
     </div>
     """, unsafe_allow_html=True)
-    
-    if st.button("→ Open Keyword Clustering", key="cluster", use_container_width=True):
-        st.switch_page("pages/5_Keyword_Clustering_Expert.py")
 
 # Footer
 st.markdown("""
@@ -182,12 +162,9 @@ with st.sidebar:
     
     st.markdown("### ✅ Active Tools (4)")
     st.markdown("""
-**Select a tool from the main page:**
+**Click a tool below to open:**
 
-- 🔍 SERP Analyzer
-- 🤖 Query Fan-Out Simulator
-- 🕷️ Competitor Content Analyzer
-- 🧩 Keyword Clustering Expert
+Use the Streamlit navigation above ☝️
     """)
     
     st.markdown("---")
@@ -203,7 +180,7 @@ with st.sidebar:
     
     st.markdown("### 📚 Quick Start")
     st.markdown("""
-1. Click a tool button
+1. Select tool from sidebar navigation
 2. Insert required parameters
 3. Run analysis
 4. Download results
