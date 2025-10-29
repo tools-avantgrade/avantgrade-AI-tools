@@ -79,7 +79,6 @@ st.markdown("""
         font-size: 0.9em;
     }
     
-    /* Style bottoni come parte della card */
     .stButton>button {
         background: transparent;
         border: none;
@@ -108,6 +107,13 @@ st.markdown("""
 
 st.markdown("<br>", unsafe_allow_html=True)
 
+# NOTA: I tuoi file devono chiamarsi con underscore per funzionare con st.switch_page()
+# Rinomina i file da:
+# 1-SERP-Analyzer.py → 1_SERP_Analyzer.py
+# 3-Query-Fan-Out-Simulator.py → 3_Query_Fan_Out_Simulator.py
+# 4-Competitor-Content-Analyzer.py → 4_Competitor_Content_Analyzer.py
+# 5-Keyword-Clustering-Expert.py → 5_Keyword_Clustering_Expert.py
+
 # Tools Grid - 4 tool attivi
 col1, col2 = st.columns(2)
 
@@ -121,7 +127,7 @@ with col1:
     """, unsafe_allow_html=True)
     
     if st.button("→ Open SERP Analyzer", key="serp", use_container_width=True):
-        st.switch_page("pages/1-SERP-Analyzer.py")
+        st.switch_page("pages/1_SERP_Analyzer.py")
     
     st.markdown("<br>", unsafe_allow_html=True)
     
@@ -134,7 +140,7 @@ with col1:
     """, unsafe_allow_html=True)
     
     if st.button("→ Open Competitor Analyzer", key="competitor", use_container_width=True):
-        st.switch_page("pages/4-Competitor-Content-Analyzer.py")
+        st.switch_page("pages/4_Competitor_Content_Analyzer.py")
 
 with col2:
     # Query Fan-Out
@@ -146,7 +152,7 @@ with col2:
     """, unsafe_allow_html=True)
     
     if st.button("→ Open Query Fan-Out", key="fanout", use_container_width=True):
-        st.switch_page("pages/3-Query-Fan-Out-Simulator.py")
+        st.switch_page("pages/3_Query_Fan_Out_Simulator.py")
     
     st.markdown("<br>", unsafe_allow_html=True)
     
@@ -159,7 +165,7 @@ with col2:
     """, unsafe_allow_html=True)
     
     if st.button("→ Open Keyword Clustering", key="cluster", use_container_width=True):
-        st.switch_page("pages/5-Keyword-Clustering-Expert.py")
+        st.switch_page("pages/5_Keyword_Clustering_Expert.py")
 
 # Footer
 st.markdown("""
