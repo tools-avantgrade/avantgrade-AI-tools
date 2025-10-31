@@ -146,7 +146,7 @@ with col_input2:
     st.markdown("### 🎯 Categorie Custom (Opzionale)")
     
     if clustering_mode == "Custom (tu definisci categorie)":
-        st.markdown("**OBBLIGATORIO** - Inserisci le tue categorie:")
+        st.markdown("Inserisci le tue categorie:")
     else:
         st.markdown("**OPZIONALE** - Suggerisci categorie iniziali:")
     
