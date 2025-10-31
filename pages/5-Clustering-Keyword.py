@@ -138,7 +138,7 @@ with col_input1:
     keywords_input = st.text_area(
         "Inserisci le keyword (una per riga)",
         height=300,
-        placeholder="best mascara\nmascara for volume\nwaterproof mascara\n...",
+        placeholder="armani lipstick\nbest base makeup for oily skin\nbad gal 24 hour eye pencil waterproof black 0.25 g\ncheap mascara\n...",
         help="Una keyword per riga. Supporta fino a 5000+ keywords."
     )
 
@@ -153,7 +153,7 @@ with col_input2:
     custom_categories = st.text_area(
         "Categorie predefinite",
         height=300,
-        placeholder="Generic\nApplication Area\nBuy / Compare\nFeature or Finish\nBrand Specific\nPrice Related\nProblem / Solution\nTutorial / How To\n...",
+        placeholder="Generic\nBuy / Compare\nFeature or Finish\nPrice Related\nProblem / Solution\nTutorial / How To\n...",
         help="Una categoria per riga. L'AI userà queste come base."
     )
     
@@ -164,8 +164,8 @@ with col_input2:
 # Info box
 st.markdown("""
 <div class='info-box'>
-💡 <strong>Intent-Based Clustering:</strong> Le keyword vengono categorizzate in base all'intento di ricerca
-(Generic, Buy/Compare, Feature, Tutorial, etc.) invece che per prodotto. Rate Limit: ~60s tra batch.
+💡 <strong>Intent-Based Clustering:</strong> Keywords categorizzate per MOTIVO della ricerca, non per tipo di prodotto.
+Brand rilevati automaticamente in colonna separata.
 </div>
 """, unsafe_allow_html=True)
 
@@ -196,119 +196,145 @@ def cluster_keywords_claude(keywords_list, api_key, language, min_size, max_clus
             if total_batches > 1:
                 st.text(f"📦 Batch {batch_idx + 1}/{total_batches}: keywords {start_idx+1}-{end_idx}")
             
-            # Prompt diverso in base alla modalità
+            # Prompt universale intent-based con brand detection
             if mode == "Custom (tu definisci categorie)" or (custom_cats and len(custom_cats) > 0):
-                # Modalità CUSTOM con categorie predefinite
                 categories_text = "\n".join(f"- {cat}" for cat in custom_cats)
                 
                 if mode == "Custom (tu definisci categorie)":
-                    extra_instruction = f"Use ONLY these {len(custom_cats)} categories. Do NOT create new categories."
+                    extra_instruction = f"Use ONLY these {len(custom_cats)} categories."
                 else:
-                    extra_instruction = f"Use these {len(custom_cats)} categories as PRIMARY options. You can create up to {max_clusters} additional categories ONLY if needed."
+                    extra_instruction = f"Prefer these {len(custom_cats)} categories. Create max {max_clusters} additional if needed."
                 
-                prompt = f"""You are a professional SEO keyword clustering expert specializing in INTENT-BASED categorization.
+                prompt = f"""You are an expert SEO keyword intent analyzer.
 
-CRITICAL: Group keywords by USER INTENT and SEARCH BEHAVIOR, NOT by product type or brand.
+TASK: Categorize keywords by USER SEARCH INTENT (why they're searching), NOT by product type.
 
-KEYWORDS TO CATEGORIZE:
+KEYWORDS ({len(batch_keywords)}):
 {chr(10).join(f"{i+1}. {kw}" for i, kw in enumerate(batch_keywords))}
 
-YOUR PREDEFINED INTENT CATEGORIES:
+YOUR CATEGORIES:
 {categories_text}
 
-INTENT CATEGORIZATION RULES:
-1. {extra_instruction}
-2. EVERY keyword MUST be assigned (all {len(batch_keywords)} keywords)
-3. Min {min_size} keywords per category (flexible)
-4. **THINK ABOUT USER INTENT**: What is the user trying to DO?
-   - Are they learning? → Tutorial/How To
-   - Are they comparing prices? → Buy/Compare
-   - Are they solving a problem? → Problem/Solution
-   - Are they looking for features? → Feature or Finish
-   - Are they just browsing? → Generic
+INTENT CATEGORIZATION LOGIC:
 
-EXAMPLES OF INTENT-BASED THINKING:
-❌ WRONG: "dior nail polish" → Brand Specific
-✅ RIGHT: "dior nail polish" → Generic (broad product search)
+1. **Generic**: Vague, broad searches with NO specific intent signals
+   Examples: "armani lipstick", "nike shoes", "samsung phone"
+   → User is just browsing, no clear goal
 
-❌ WRONG: "makeup brush" → Application Tools
-✅ RIGHT: "makeup brush" → Generic (broad search)
+2. **Buy / Compare**: Contains comparison or shopping modifiers
+   Examples: "best base makeup for oily skin", "top 10 laptops", "iphone vs samsung"
+   → Words like: best, top, vs, comparison, review, affordable
 
-❌ WRONG: "best mascara for volume" → Volume Products
-✅ RIGHT: "best mascara for volume" → Feature or Finish (seeking specific attribute)
+3. **Feature or Finish**: Describes SPECIFIC attributes or characteristics
+   Examples: "waterproof mascara", "bad gal 24 hour eye pencil waterproof black 0.25 g", "matte red lipstick"
+   → Has detailed specs, features, colors, finishes
 
-❌ WRONG: "cheap mascara" → Budget Products
-✅ RIGHT: "cheap mascara" → Price Related (price-focused intent)
+4. **Price Related**: Budget-focused searches
+   Examples: "cheap mascara", "luxury skincare", "affordable laptop"
+   → Words like: cheap, expensive, luxury, budget, affordable, under $X
 
-SEARCH INTENT TYPES (for each category):
-- Commercial: Ready to buy, high intent
-- Transactional: Comparing options, shopping mode
-- Informational: Learning, researching, how-to
-- Navigational: Seeking specific brand/product
+5. **Problem / Solution**: Addresses a specific problem
+   Examples: "mascara that doesn't smudge", "laptop for gaming", "phone with best camera"
+   → User has a problem to solve
 
-Return ONLY valid JSON:
+6. **Tutorial / How To**: Educational intent
+   Examples: "how to apply mascara", "makeup tutorial", "nail art ideas"
+   → Words like: how to, tutorial, guide, tips, ideas
+
+BRAND DETECTION:
+- If keyword contains a recognizable brand name (Armani, Dior, MAC, Nike, Apple, etc.), extract it
+- Put brand name in "brand" field
+- Do NOT create "Brand Specific" categories
+
+RULES:
+- {extra_instruction}
+- EVERY keyword must be categorized (all {len(batch_keywords)})
+- Min {min_size} keywords/category (flexible)
+- Think: "WHY is the user searching this?"
+
+JSON FORMAT:
 {{
   "clusters": [
     {{
-      "cluster_name": "Category Name (from predefined list)",
-      "search_intent": "Commercial|Transactional|Informational|Navigational",
-      "keywords": ["kw1", "kw2"],
-      "description": "What intent/behavior unites these keywords"
+      "cluster_name": "Category from list",
+      "keywords": [
+        {{
+          "keyword": "the keyword",
+          "brand": "Brand Name or null"
+        }}
+      ],
+      "description": "Why these share same intent"
     }}
   ]
 }}"""
             else:
-                # Modalità AUTO - AI genera categorie intent-based
-                prompt = f"""You are a professional SEO keyword clustering expert specializing in INTENT-BASED categorization.
+                # AUTO mode
+                prompt = f"""You are an expert SEO keyword intent analyzer.
 
-CRITICAL: Group keywords by USER INTENT and SEARCH BEHAVIOR, NOT by product type or brand.
+TASK: Categorize keywords by USER SEARCH INTENT (why they're searching), NOT by product type.
 
-KEYWORDS TO CATEGORIZE:
+KEYWORDS ({len(batch_keywords)}):
 {chr(10).join(f"{i+1}. {kw}" for i, kw in enumerate(batch_keywords))}
 
-INTENT CATEGORIZATION RULES:
-1. Create 5-{max_clusters} INTENT-BASED categories
-2. EVERY keyword MUST be assigned (all {len(batch_keywords)} keywords)
-3. Min {min_size} keywords per category (flexible)
-4. **THINK ABOUT USER INTENT**: What is the user trying to DO?
+INTENT CATEGORIZATION LOGIC:
 
-INTENT CATEGORY TYPES (use these patterns):
-- **Generic**: Broad, high-level searches (e.g., "mascara", "nail polish")
-- **Application Area**: Specific use case/body part (e.g., "mascara for sensitive eyes")
-- **Buy / Compare**: Shopping intent (e.g., "best mascara", "mascara vs eyeliner")
-- **Feature or Finish**: Specific attributes (e.g., "waterproof mascara", "matte lipstick")
-- **Brand Specific**: Brand-related but still intent-focused (e.g., "dior alternatives")
-- **Price Related**: Budget-driven (e.g., "cheap mascara", "luxury makeup")
-- **Problem / Solution**: Solving an issue (e.g., "mascara that doesn't smudge")
-- **Tutorial / How To**: Educational (e.g., "how to apply mascara")
-- **Review / Rating**: Social proof seeking (e.g., "mascara reviews")
+1. **Generic**: Vague, broad searches with NO specific intent signals
+   Examples: "armani lipstick", "nike shoes", "samsung phone"
+   → User is just browsing, no clear goal
 
-EXAMPLES OF CORRECT INTENT THINKING:
-✅ "dior nail polish" → Generic (broad product search, not brand-specific)
-✅ "best mascara for volume" → Feature or Finish (seeking volume attribute)
-✅ "cheap mascara" → Price Related (budget-focused)
-✅ "how to remove mascara" → Tutorial / How To (learning intent)
-✅ "mascara vs eyeliner" → Buy / Compare (comparison intent)
+2. **Buy / Compare**: Contains comparison or shopping modifiers
+   Examples: "best base makeup for oily skin", "top 10 laptops", "iphone vs samsung"
+   → Words like: best, top, vs, comparison, review, affordable
 
-SEARCH INTENT (for each category):
-- Commercial: Ready to buy
-- Transactional: Comparing, shopping
-- Informational: Learning, researching
-- Navigational: Seeking specific brand
+3. **Feature or Finish**: Describes SPECIFIC attributes or characteristics
+   Examples: "waterproof mascara", "bad gal 24 hour eye pencil waterproof black 0.25 g", "matte red lipstick"
+   → Has detailed specs, features, colors, finishes
 
-Return ONLY valid JSON:
+4. **Price Related**: Budget-focused searches
+   Examples: "cheap mascara", "luxury skincare", "affordable laptop"
+   → Words like: cheap, expensive, luxury, budget, affordable, under $X
+
+5. **Problem / Solution**: Addresses a specific problem
+   Examples: "mascara that doesn't smudge", "laptop for gaming", "phone with best camera"
+   → User has a problem to solve
+
+6. **Tutorial / How To**: Educational intent
+   Examples: "how to apply mascara", "makeup tutorial", "nail art ideas"
+   → Words like: how to, tutorial, guide, tips, ideas
+
+7. **Application Area**: Specific use case or body part/location
+   Examples: "mascara for sensitive eyes", "running shoes for flat feet"
+   → Specifies WHERE/WHEN it's used
+
+BRAND DETECTION:
+- If keyword contains a recognizable brand name, extract it
+- Put brand name in "brand" field
+- Do NOT create "Brand Specific" categories
+
+CREATE: 5-{max_clusters} intent categories
+RULES:
+- EVERY keyword must be categorized (all {len(batch_keywords)})
+- Min {min_size} keywords/category (flexible)
+- Think: "WHY is the user searching this?"
+- Focus on INTENT, not product type
+
+JSON FORMAT:
 {{
   "clusters": [
     {{
       "cluster_name": "Intent Category Name",
-      "search_intent": "Commercial|Transactional|Informational|Navigational",
-      "keywords": ["kw1", "kw2"],
-      "description": "What user behavior/intent unites these"
+      "keywords": [
+        {{
+          "keyword": "the keyword",
+          "brand": "Brand Name or null"
+        }}
+      ],
+      "description": "Why these share same search intent"
     }}
   ]
 }}"""
 
-            # Retry logic per rate limits
+            # Retry logic
             max_retries = 3
             retry_count = 0
             
@@ -326,7 +352,7 @@ Return ONLY valid JSON:
                         retry_count += 1
                         if retry_count < max_retries:
                             wait_time = 60 * retry_count
-                            st.warning(f"⏳ Rate limit raggiunto. Attesa {wait_time}s (tentativo {retry_count}/{max_retries})...")
+                            st.warning(f"⏳ Rate limit. Attesa {wait_time}s (tentativo {retry_count}/{max_retries})...")
                             time.sleep(wait_time)
                         else:
                             return None, f"Rate limit superato dopo {max_retries} tentativi."
@@ -362,6 +388,8 @@ Return ONLY valid JSON:
             
             try:
                 batch_result = json.loads(result_text)
+                
+                # Count keywords
                 batch_kw_count = sum(len(c['keywords']) for c in batch_result['clusters'])
                 
                 if batch_kw_count < len(batch_keywords):
@@ -377,6 +405,7 @@ Return ONLY valid JSON:
                 st.code(result_text[:500])
                 return None, f"JSON error: {str(e)}"
         
+        # Count total
         total_clustered = sum(len(c['keywords']) for c in all_clusters)
         missing_total = len(keywords_list) - total_clustered
         
@@ -387,10 +416,10 @@ Return ONLY valid JSON:
             "total_keywords": total_clustered,
             "total_keywords_input": len(keywords_list),
             "total_clusters": len(all_clusters),
-            "commercial_clusters": sum(1 for c in all_clusters if c['search_intent'] == 'Commercial'),
-            "transactional_clusters": sum(1 for c in all_clusters if c['search_intent'] == 'Transactional'),
-            "informational_clusters": sum(1 for c in all_clusters if c['search_intent'] == 'Informational'),
-            "navigational_clusters": sum(1 for c in all_clusters if c['search_intent'] == 'Navigational')
+            "generic_count": sum(len(c['keywords']) for c in all_clusters if c['cluster_name'] == 'Generic'),
+            "buy_compare_count": sum(len(c['keywords']) for c in all_clusters if 'Buy' in c['cluster_name'] or 'Compare' in c['cluster_name']),
+            "feature_count": sum(len(c['keywords']) for c in all_clusters if 'Feature' in c['cluster_name']),
+            "branded_count": sum(1 for c in all_clusters for kw in c['keywords'] if isinstance(kw, dict) and kw.get('brand'))
         }
         
         return {"clusters": all_clusters, "summary": summary}, None
@@ -405,7 +434,7 @@ if analyze_btn:
     elif not keywords_input.strip():
         st.error("⚠️ Inserisci almeno una keyword")
     elif clustering_mode == "Custom (tu definisci categorie)" and not custom_categories.strip():
-        st.error("⚠️ Modalità Custom attiva: inserisci almeno 3 categorie custom")
+        st.error("⚠️ Modalità Custom: inserisci almeno 3 categorie custom")
     else:
         keywords_list = [kw.strip() for kw in keywords_input.strip().split('\n') if kw.strip()]
         
@@ -442,17 +471,13 @@ if analyze_btn:
             else:
                 st.session_state['clustering_results'] = result
                 
-                intent_summary = f"{result['summary']['commercial_clusters']} Commercial | {result['summary']['transactional_clusters']} Transactional | {result['summary']['informational_clusters']} Informational"
-                if result['summary']['navigational_clusters'] > 0:
-                    intent_summary += f" | {result['summary']['navigational_clusters']} Navigational"
-                
                 st.markdown(f"""
                 <div class='success-box'>
                 ✅ <strong>Analisi completata!</strong><br>
                 • {result['summary']['total_keywords_input']} keywords inviate<br>
                 • {result['summary']['total_keywords']} keywords categorizzate<br>
                 • {result['summary']['total_clusters']} categorie create<br>
-                • {intent_summary}
+                • {result['summary']['branded_count']} keywords con brand
                 </div>
                 """, unsafe_allow_html=True)
 
@@ -465,12 +490,20 @@ if 'clustering_results' in st.session_state:
     
     table_data = []
     for idx, cluster in enumerate(result['clusters'], 1):
-        for kw in cluster['keywords']:
+        for kw_data in cluster['keywords']:
+            # Handle both dict and string formats
+            if isinstance(kw_data, dict):
+                keyword = kw_data.get('keyword', '')
+                brand = kw_data.get('brand', '')
+            else:
+                keyword = kw_data
+                brand = ''
+            
             table_data.append({
                 'Category #': idx,
                 'Category Name': cluster['cluster_name'],
-                'Search Intent': cluster['search_intent'],
-                'Keyword': kw,
+                'Keyword': keyword,
+                'Brand': brand if brand else '',
                 'Intent Description': cluster['description'],
                 'Category Size': len(cluster['keywords'])
             })
@@ -490,10 +523,7 @@ if 'clustering_results' in st.session_state:
             'Total Keywords Input': result['summary']['total_keywords_input'],
             'Total Keywords Categorized': result['summary']['total_keywords'],
             'Total Categories': result['summary']['total_clusters'],
-            'Commercial': result['summary']['commercial_clusters'],
-            'Transactional': result['summary']['transactional_clusters'],
-            'Informational': result['summary']['informational_clusters'],
-            'Navigational': result['summary'].get('navigational_clusters', 0)
+            'Keywords with Brand': result['summary']['branded_count']
         }])
         summary_df.to_excel(writer, sheet_name='Summary', index=False)
         
@@ -502,7 +532,6 @@ if 'clustering_results' in st.session_state:
             category_summary.append({
                 'Category #': idx,
                 'Category Name': cluster['cluster_name'],
-                'Search Intent': cluster['search_intent'],
                 'Keywords Count': len(cluster['keywords']),
                 'Intent Description': cluster['description']
             })
