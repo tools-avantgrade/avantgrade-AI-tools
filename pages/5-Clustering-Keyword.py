@@ -206,82 +206,104 @@ def cluster_keywords_claude(keywords_list, api_key, language, min_size, max_clus
                 else:
                     extra_instruction = f"Use these {len(custom_cats)} categories as PRIMARY options. You can create up to {max_clusters} additional categories ONLY if needed."
                 
-                prompt = f"""You are a professional SEO keyword clustering expert.
+                prompt = f"""You are a professional SEO keyword clustering expert specializing in INTENT-BASED categorization.
 
-Task: Categorize these {len(batch_keywords)} keywords in {language} using INTENT-BASED categorization.
+CRITICAL: Group keywords by USER INTENT and SEARCH BEHAVIOR, NOT by product type or brand.
 
-KEYWORDS:
+KEYWORDS TO CATEGORIZE:
 {chr(10).join(f"{i+1}. {kw}" for i, kw in enumerate(batch_keywords))}
 
-PREDEFINED CATEGORIES:
+YOUR PREDEFINED INTENT CATEGORIES:
 {categories_text}
 
-RULES:
+INTENT CATEGORIZATION RULES:
 1. {extra_instruction}
-2. EVERY keyword MUST be assigned to a category (all {len(batch_keywords)} keywords)
-3. Min {min_size} keywords per category (flexible if needed)
-4. Focus on SEARCH INTENT, not product types
-5. Ask yourself: "What makes this search unique? What's the user's goal?"
+2. EVERY keyword MUST be assigned (all {len(batch_keywords)} keywords)
+3. Min {min_size} keywords per category (flexible)
+4. **THINK ABOUT USER INTENT**: What is the user trying to DO?
+   - Are they learning? → Tutorial/How To
+   - Are they comparing prices? → Buy/Compare
+   - Are they solving a problem? → Problem/Solution
+   - Are they looking for features? → Feature or Finish
+   - Are they just browsing? → Generic
 
-SEARCH INTENT TYPES (assign to each category):
-- Commercial (ready to buy)
-- Transactional (comparison, shopping)
-- Informational (learning, how-to)
-- Navigational (brand/specific search)
+EXAMPLES OF INTENT-BASED THINKING:
+❌ WRONG: "dior nail polish" → Brand Specific
+✅ RIGHT: "dior nail polish" → Generic (broad product search)
+
+❌ WRONG: "makeup brush" → Application Tools
+✅ RIGHT: "makeup brush" → Generic (broad search)
+
+❌ WRONG: "best mascara for volume" → Volume Products
+✅ RIGHT: "best mascara for volume" → Feature or Finish (seeking specific attribute)
+
+❌ WRONG: "cheap mascara" → Budget Products
+✅ RIGHT: "cheap mascara" → Price Related (price-focused intent)
+
+SEARCH INTENT TYPES (for each category):
+- Commercial: Ready to buy, high intent
+- Transactional: Comparing options, shopping mode
+- Informational: Learning, researching, how-to
+- Navigational: Seeking specific brand/product
 
 Return ONLY valid JSON:
 {{
   "clusters": [
     {{
-      "cluster_name": "Category Name",
+      "cluster_name": "Category Name (from predefined list)",
       "search_intent": "Commercial|Transactional|Informational|Navigational",
       "keywords": ["kw1", "kw2"],
-      "description": "Why these keywords share this intent"
+      "description": "What intent/behavior unites these keywords"
     }}
   ]
 }}"""
             else:
                 # Modalità AUTO - AI genera categorie intent-based
-                prompt = f"""You are a professional SEO keyword clustering expert.
+                prompt = f"""You are a professional SEO keyword clustering expert specializing in INTENT-BASED categorization.
 
-Task: Analyze and categorize these {len(batch_keywords)} keywords in {language} using INTENT-BASED categorization.
+CRITICAL: Group keywords by USER INTENT and SEARCH BEHAVIOR, NOT by product type or brand.
 
-KEYWORDS:
+KEYWORDS TO CATEGORIZE:
 {chr(10).join(f"{i+1}. {kw}" for i, kw in enumerate(batch_keywords))}
 
-RULES:
-1. Create between 5 and {max_clusters} INTENT-BASED categories
+INTENT CATEGORIZATION RULES:
+1. Create 5-{max_clusters} INTENT-BASED categories
 2. EVERY keyword MUST be assigned (all {len(batch_keywords)} keywords)
-3. Min {min_size} keywords per category (flexible if needed)
-4. Focus on SEARCH INTENT, NOT product types
-5. Ask yourself: "What makes this search unique? What's the user's goal?"
+3. Min {min_size} keywords per category (flexible)
+4. **THINK ABOUT USER INTENT**: What is the user trying to DO?
 
-CATEGORY TYPES TO USE (examples):
-- Generic (broad terms, high-level)
-- Application Area (specific use case)
-- Buy / Compare (shopping intent)
-- Feature or Finish (specific attributes)
-- Brand Specific (brand-related)
-- Price Related (budget, cheap, expensive)
-- Problem / Solution (solve an issue)
-- Tutorial / How To (educational)
-- Review / Rating (social proof)
-- Location Based (geo-specific)
+INTENT CATEGORY TYPES (use these patterns):
+- **Generic**: Broad, high-level searches (e.g., "mascara", "nail polish")
+- **Application Area**: Specific use case/body part (e.g., "mascara for sensitive eyes")
+- **Buy / Compare**: Shopping intent (e.g., "best mascara", "mascara vs eyeliner")
+- **Feature or Finish**: Specific attributes (e.g., "waterproof mascara", "matte lipstick")
+- **Brand Specific**: Brand-related but still intent-focused (e.g., "dior alternatives")
+- **Price Related**: Budget-driven (e.g., "cheap mascara", "luxury makeup")
+- **Problem / Solution**: Solving an issue (e.g., "mascara that doesn't smudge")
+- **Tutorial / How To**: Educational (e.g., "how to apply mascara")
+- **Review / Rating**: Social proof seeking (e.g., "mascara reviews")
 
-SEARCH INTENT (assign to each category):
-- Commercial (ready to buy)
-- Transactional (comparison, shopping)
-- Informational (learning, how-to)
-- Navigational (brand/specific search)
+EXAMPLES OF CORRECT INTENT THINKING:
+✅ "dior nail polish" → Generic (broad product search, not brand-specific)
+✅ "best mascara for volume" → Feature or Finish (seeking volume attribute)
+✅ "cheap mascara" → Price Related (budget-focused)
+✅ "how to remove mascara" → Tutorial / How To (learning intent)
+✅ "mascara vs eyeliner" → Buy / Compare (comparison intent)
+
+SEARCH INTENT (for each category):
+- Commercial: Ready to buy
+- Transactional: Comparing, shopping
+- Informational: Learning, researching
+- Navigational: Seeking specific brand
 
 Return ONLY valid JSON:
 {{
   "clusters": [
     {{
-      "cluster_name": "Category Name",
+      "cluster_name": "Intent Category Name",
       "search_intent": "Commercial|Transactional|Informational|Navigational",
       "keywords": ["kw1", "kw2"],
-      "description": "Why these keywords share this intent"
+      "description": "What user behavior/intent unites these"
     }}
   ]
 }}"""
