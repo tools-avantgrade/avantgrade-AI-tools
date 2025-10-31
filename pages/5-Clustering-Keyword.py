@@ -120,9 +120,9 @@ with st.sidebar:
     
     batch_size_option = st.selectbox(
         "Batch size (keywords)",
-        [250, 500, 1000],
+        [150, 300, 500],
         index=1,
-        help="Riduci se hai rate limit errors"
+        help="Riduci se hai errori JSON troncati o rate limit"
     )
     
     st.markdown("---")
@@ -251,6 +251,7 @@ RULES:
 - EVERY keyword must be categorized (all {len(batch_keywords)})
 - Min {min_size} keywords/category (flexible)
 - Think: "WHY is the user searching this?"
+- Keep "description" field SHORT (max 10 words)
 
 JSON FORMAT:
 {{
@@ -317,6 +318,7 @@ RULES:
 - Min {min_size} keywords/category (flexible)
 - Think: "WHY is the user searching this?"
 - Focus on INTENT, not product type
+- Keep "description" field SHORT (max 10 words)
 
 JSON FORMAT:
 {{
@@ -342,7 +344,7 @@ JSON FORMAT:
                 try:
                     response = client.messages.create(
                         model="claude-sonnet-4-20250514",
-                        max_tokens=8000,
+                        max_tokens=16000,  # Aumentato per batch grandi
                         messages=[{"role": "user", "content": prompt}]
                     )
                     break
@@ -386,6 +388,20 @@ JSON FORMAT:
             
             result_text = result_text[start:end+1]
             
+            # FIX: Se il JSON è troncato, prova a chiuderlo
+            if not result_text.endswith("]}"):
+                # Conta parentesi aperte
+                open_brackets = result_text.count("[") - result_text.count("]")
+                open_braces = result_text.count("{") - result_text.count("}")
+                
+                # Cerca l'ultima virgola e tronca lì
+                last_complete = result_text.rfind("},")
+                if last_complete != -1:
+                    result_text = result_text[:last_complete+1]
+                    # Chiudi correttamente
+                    result_text += "\n  ]\n}"
+                    st.warning(f"⚠️ Batch {batch_idx+1}: JSON troncato, recuperate keyword parziali")
+            
             try:
                 batch_result = json.loads(result_text)
                 
@@ -402,7 +418,7 @@ JSON FORMAT:
                 
             except json.JSONDecodeError as e:
                 st.error(f"❌ Batch {batch_idx+1}: errore JSON")
-                st.code(result_text[:500])
+                st.code(result_text[:500] + "\n...\n" + result_text[-200:])
                 return None, f"JSON error: {str(e)}"
         
         # Count total
