@@ -58,12 +58,20 @@ st.markdown("""
         margin: 1rem 0;
         color: #cccccc;
     }
+    
+    .warning-box {
+        background-color: #1a1a1a;
+        border-left: 3px solid #F7931E;
+        padding: 1rem;
+        margin: 1rem 0;
+        color: #cccccc;
+    }
     </style>
 """, unsafe_allow_html=True)
 
 # Header
 st.title("🧩 Keyword Clustering Expert")
-st.markdown("**AI-powered semantic grouping con Claude Sonnet 4.5**")
+st.markdown("**AI-powered intent-based clustering con Claude Sonnet 4.5**")
 st.markdown("---")
 
 # Sidebar
@@ -83,14 +91,31 @@ with st.sidebar:
         ["Italiano", "English", "Español", "Français", "Deutsch"]
     )
     
-    min_cluster_size = st.slider(
-        "Min keywords per cluster",
-        2, 10, 3
+    clustering_mode = st.radio(
+        "Modalità Clustering",
+        ["Auto (AI genera categorie)", "Custom (tu definisci categorie)"],
+        help="Auto: AI crea categorie da zero. Custom: usi le tue categorie predefinite"
     )
     
-    max_clusters = st.slider(
-        "Max clusters per batch",
-        10, 50, 20
+    st.markdown("---")
+    
+    if clustering_mode == "Auto (AI genera categorie)":
+        max_clusters = st.slider(
+            "Max categorie da generare",
+            5, 30, 15,
+            help="Numero massimo di categorie che l'AI può creare"
+        )
+    else:
+        max_clusters = st.slider(
+            "Categorie extra da generare",
+            0, 10, 2,
+            help="Categorie aggiuntive se quelle custom non bastano"
+        )
+    
+    min_cluster_size = st.slider(
+        "Min keywords per categoria",
+        1, 10, 2,
+        help="Minimo keywords per categoria (flessibile)"
     )
     
     batch_size_option = st.selectbox(
@@ -106,26 +131,55 @@ with st.sidebar:
     st.markdown("**⚠️ Rate limit:** 60s delay tra batch")
 
 # Input
-st.markdown("### 📝 Input Keywords")
+col_input1, col_input2 = st.columns([1, 1])
 
-keywords_input = st.text_area(
-    "Inserisci le keyword (una per riga)",
-    height=300,
-    placeholder="keyword 1\nkeyword 2\nkeyword 3\n...",
-    help="Una keyword per riga. Supporta fino a 5000+ keywords."
-)
+with col_input1:
+    st.markdown("### 📝 Input Keywords")
+    keywords_input = st.text_area(
+        "Inserisci le keyword (una per riga)",
+        height=300,
+        placeholder="best mascara\nmascara for volume\nwaterproof mascara\n...",
+        help="Una keyword per riga. Supporta fino a 5000+ keywords."
+    )
 
+with col_input2:
+    st.markdown("### 🎯 Categorie Custom (Opzionale)")
+    
+    if clustering_mode == "Custom (tu definisci categorie)":
+        st.markdown("**OBBLIGATORIO** - Inserisci le tue categorie:")
+    else:
+        st.markdown("**OPZIONALE** - Suggerisci categorie iniziali:")
+    
+    custom_categories = st.text_area(
+        "Categorie predefinite",
+        height=300,
+        placeholder="Generic\nApplication Area\nBuy / Compare\nFeature or Finish\nBrand Specific\nPrice Related\nProblem / Solution\nTutorial / How To\n...",
+        help="Una categoria per riga. L'AI userà queste come base."
+    )
+    
+    if custom_categories.strip():
+        categories_list = [cat.strip() for cat in custom_categories.strip().split('\n') if cat.strip()]
+        st.info(f"✅ {len(categories_list)} categorie definite")
+
+# Info box
 st.markdown("""
 <div class='info-box'>
-💡 <strong>Rate Limit Management:</strong> Il tool gestisce automaticamente i rate limit di Claude
-con pause di 60s tra i batch. Per 3000 keywords (~6 batch) ci vogliono circa 6-7 minuti.
+💡 <strong>Intent-Based Clustering:</strong> Le keyword vengono categorizzate in base all'intento di ricerca
+(Generic, Buy/Compare, Feature, Tutorial, etc.) invece che per prodotto. Rate Limit: ~60s tra batch.
 </div>
 """, unsafe_allow_html=True)
+
+if clustering_mode == "Custom (tu definisci categorie)" and not custom_categories.strip():
+    st.markdown("""
+    <div class='warning-box'>
+    ⚠️ <strong>Modalità Custom attiva:</strong> Devi inserire almeno 3 categorie custom nel campo a destra.
+    </div>
+    """, unsafe_allow_html=True)
 
 analyze_btn = st.button("🚀 Analizza Keywords", use_container_width=True)
 
 # Funzione clustering
-def cluster_keywords_claude(keywords_list, api_key, language, min_size, max_clusters, batch_size=500):
+def cluster_keywords_claude(keywords_list, api_key, language, min_size, max_clusters, batch_size, custom_cats, mode):
     try:
         client = Anthropic(api_key=api_key)
         all_clusters = []
@@ -142,28 +196,92 @@ def cluster_keywords_claude(keywords_list, api_key, language, min_size, max_clus
             if total_batches > 1:
                 st.text(f"📦 Batch {batch_idx + 1}/{total_batches}: keywords {start_idx+1}-{end_idx}")
             
-            prompt = f"""You are a professional SEO keyword clustering expert.
+            # Prompt diverso in base alla modalità
+            if mode == "Custom (tu definisci categorie)" or (custom_cats and len(custom_cats) > 0):
+                # Modalità CUSTOM con categorie predefinite
+                categories_text = "\n".join(f"- {cat}" for cat in custom_cats)
+                
+                if mode == "Custom (tu definisci categorie)":
+                    extra_instruction = f"Use ONLY these {len(custom_cats)} categories. Do NOT create new categories."
+                else:
+                    extra_instruction = f"Use these {len(custom_cats)} categories as PRIMARY options. You can create up to {max_clusters} additional categories ONLY if needed."
+                
+                prompt = f"""You are a professional SEO keyword clustering expert.
 
-Task: Analyze and cluster these {len(batch_keywords)} keywords in {language}.
+Task: Categorize these {len(batch_keywords)} keywords in {language} using INTENT-BASED categorization.
 
 KEYWORDS:
 {chr(10).join(f"{i+1}. {kw}" for i, kw in enumerate(batch_keywords))}
 
+PREDEFINED CATEGORIES:
+{categories_text}
+
 RULES:
-1. Create 10-{max_clusters} semantic clusters
-2. EVERY keyword MUST be assigned (all {len(batch_keywords)} keywords)
-3. Min {min_size} keywords per cluster (flexible if needed)
-4. Search intent: Commercial, Transactional, or Informational
-5. Group by semantic similarity
+1. {extra_instruction}
+2. EVERY keyword MUST be assigned to a category (all {len(batch_keywords)} keywords)
+3. Min {min_size} keywords per category (flexible if needed)
+4. Focus on SEARCH INTENT, not product types
+5. Ask yourself: "What makes this search unique? What's the user's goal?"
+
+SEARCH INTENT TYPES (assign to each category):
+- Commercial (ready to buy)
+- Transactional (comparison, shopping)
+- Informational (learning, how-to)
+- Navigational (brand/specific search)
 
 Return ONLY valid JSON:
 {{
   "clusters": [
     {{
-      "cluster_name": "Name",
-      "search_intent": "Commercial|Transactional|Informational",
+      "cluster_name": "Category Name",
+      "search_intent": "Commercial|Transactional|Informational|Navigational",
       "keywords": ["kw1", "kw2"],
-      "description": "Brief explanation"
+      "description": "Why these keywords share this intent"
+    }}
+  ]
+}}"""
+            else:
+                # Modalità AUTO - AI genera categorie intent-based
+                prompt = f"""You are a professional SEO keyword clustering expert.
+
+Task: Analyze and categorize these {len(batch_keywords)} keywords in {language} using INTENT-BASED categorization.
+
+KEYWORDS:
+{chr(10).join(f"{i+1}. {kw}" for i, kw in enumerate(batch_keywords))}
+
+RULES:
+1. Create between 5 and {max_clusters} INTENT-BASED categories
+2. EVERY keyword MUST be assigned (all {len(batch_keywords)} keywords)
+3. Min {min_size} keywords per category (flexible if needed)
+4. Focus on SEARCH INTENT, NOT product types
+5. Ask yourself: "What makes this search unique? What's the user's goal?"
+
+CATEGORY TYPES TO USE (examples):
+- Generic (broad terms, high-level)
+- Application Area (specific use case)
+- Buy / Compare (shopping intent)
+- Feature or Finish (specific attributes)
+- Brand Specific (brand-related)
+- Price Related (budget, cheap, expensive)
+- Problem / Solution (solve an issue)
+- Tutorial / How To (educational)
+- Review / Rating (social proof)
+- Location Based (geo-specific)
+
+SEARCH INTENT (assign to each category):
+- Commercial (ready to buy)
+- Transactional (comparison, shopping)
+- Informational (learning, how-to)
+- Navigational (brand/specific search)
+
+Return ONLY valid JSON:
+{{
+  "clusters": [
+    {{
+      "cluster_name": "Category Name",
+      "search_intent": "Commercial|Transactional|Informational|Navigational",
+      "keywords": ["kw1", "kw2"],
+      "description": "Why these keywords share this intent"
     }}
   ]
 }}"""
@@ -176,26 +294,26 @@ Return ONLY valid JSON:
                 try:
                     response = client.messages.create(
                         model="claude-sonnet-4-20250514",
-                        max_tokens=8000,  # Ridotto da 16000 per rate limit
+                        max_tokens=8000,
                         messages=[{"role": "user", "content": prompt}]
                     )
-                    break  # Success, exit retry loop
+                    break
                     
                 except Exception as e:
                     if "rate_limit" in str(e).lower():
                         retry_count += 1
                         if retry_count < max_retries:
-                            wait_time = 60 * retry_count  # 60s, 120s, 180s
-                            st.warning(f"⏳ Rate limit raggiunto. Attesa {wait_time}s prima di riprovare (tentativo {retry_count}/{max_retries})...")
+                            wait_time = 60 * retry_count
+                            st.warning(f"⏳ Rate limit raggiunto. Attesa {wait_time}s (tentativo {retry_count}/{max_retries})...")
                             time.sleep(wait_time)
                         else:
-                            return None, f"Rate limit superato dopo {max_retries} tentativi. Attendi qualche minuto e riprova."
+                            return None, f"Rate limit superato dopo {max_retries} tentativi."
                     else:
                         return None, f"Errore API: {str(e)}"
             
-            # Delay tra batch per evitare rate limit
-            if batch_idx < total_batches - 1:  # Non aspettare dopo l'ultimo batch
-                st.info("⏱️ Pausa 60s per rispettare rate limit...")
+            # Delay tra batch
+            if batch_idx < total_batches - 1:
+                st.info("⏱️ Pausa 60s per rate limit...")
                 time.sleep(60)
             
             result_text = response.content[0].text.strip()
@@ -226,9 +344,9 @@ Return ONLY valid JSON:
                 
                 if batch_kw_count < len(batch_keywords):
                     missing = len(batch_keywords) - batch_kw_count
-                    st.warning(f"⚠️ Batch {batch_idx+1}: {missing} keyword non clusterizzate ({batch_kw_count}/{len(batch_keywords)})")
+                    st.warning(f"⚠️ Batch {batch_idx+1}: {missing} keyword non categorizzate ({batch_kw_count}/{len(batch_keywords)})")
                 else:
-                    st.success(f"✅ Batch {batch_idx+1}: {batch_kw_count}/{len(batch_keywords)} keyword clusterizzate")
+                    st.success(f"✅ Batch {batch_idx+1}: {batch_kw_count}/{len(batch_keywords)} keyword categorizzate")
                 
                 all_clusters.extend(batch_result['clusters'])
                 
@@ -241,7 +359,7 @@ Return ONLY valid JSON:
         missing_total = len(keywords_list) - total_clustered
         
         if missing_total > 0:
-            st.warning(f"⚠️ TOTALE: {missing_total} keyword non clusterizzate su {len(keywords_list)}")
+            st.warning(f"⚠️ TOTALE: {missing_total} keyword non categorizzate su {len(keywords_list)}")
         
         summary = {
             "total_keywords": total_clustered,
@@ -249,7 +367,8 @@ Return ONLY valid JSON:
             "total_clusters": len(all_clusters),
             "commercial_clusters": sum(1 for c in all_clusters if c['search_intent'] == 'Commercial'),
             "transactional_clusters": sum(1 for c in all_clusters if c['search_intent'] == 'Transactional'),
-            "informational_clusters": sum(1 for c in all_clusters if c['search_intent'] == 'Informational')
+            "informational_clusters": sum(1 for c in all_clusters if c['search_intent'] == 'Informational'),
+            "navigational_clusters": sum(1 for c in all_clusters if c['search_intent'] == 'Navigational')
         }
         
         return {"clusters": all_clusters, "summary": summary}, None
@@ -263,13 +382,21 @@ if analyze_btn:
         st.error("⚠️ Inserisci Anthropic API Key")
     elif not keywords_input.strip():
         st.error("⚠️ Inserisci almeno una keyword")
+    elif clustering_mode == "Custom (tu definisci categorie)" and not custom_categories.strip():
+        st.error("⚠️ Modalità Custom attiva: inserisci almeno 3 categorie custom")
     else:
         keywords_list = [kw.strip() for kw in keywords_input.strip().split('\n') if kw.strip()]
         
-        if len(keywords_list) < 3:
+        custom_cats_list = []
+        if custom_categories.strip():
+            custom_cats_list = [cat.strip() for cat in custom_categories.strip().split('\n') if cat.strip()]
+        
+        if clustering_mode == "Custom (tu definisci categorie)" and len(custom_cats_list) < 3:
+            st.error("⚠️ Modalità Custom: inserisci almeno 3 categorie")
+        elif len(keywords_list) < 3:
             st.warning("⚠️ Minimo 3 keywords richieste")
         else:
-            with st.spinner(f'🤖 Clustering {len(keywords_list)} keywords con Claude...'):
+            with st.spinner(f'🤖 Clustering intent-based con Claude...'):
                 progress = st.progress(0)
                 progress.progress(30)
                 
@@ -279,7 +406,9 @@ if analyze_btn:
                     language,
                     min_cluster_size,
                     max_clusters,
-                    batch_size_option
+                    batch_size_option,
+                    custom_cats_list,
+                    clustering_mode
                 )
                 
                 progress.progress(100)
@@ -291,13 +420,17 @@ if analyze_btn:
             else:
                 st.session_state['clustering_results'] = result
                 
+                intent_summary = f"{result['summary']['commercial_clusters']} Commercial | {result['summary']['transactional_clusters']} Transactional | {result['summary']['informational_clusters']} Informational"
+                if result['summary']['navigational_clusters'] > 0:
+                    intent_summary += f" | {result['summary']['navigational_clusters']} Navigational"
+                
                 st.markdown(f"""
                 <div class='success-box'>
                 ✅ <strong>Analisi completata!</strong><br>
                 • {result['summary']['total_keywords_input']} keywords inviate<br>
-                • {result['summary']['total_keywords']} keywords clusterizzate<br>
-                • {result['summary']['total_clusters']} cluster creati<br>
-                • {result['summary']['commercial_clusters']} Commercial | {result['summary']['transactional_clusters']} Transactional | {result['summary']['informational_clusters']} Informational
+                • {result['summary']['total_keywords']} keywords categorizzate<br>
+                • {result['summary']['total_clusters']} categorie create<br>
+                • {intent_summary}
                 </div>
                 """, unsafe_allow_html=True)
 
@@ -312,12 +445,12 @@ if 'clustering_results' in st.session_state:
     for idx, cluster in enumerate(result['clusters'], 1):
         for kw in cluster['keywords']:
             table_data.append({
-                'Cluster #': idx,
-                'Cluster Name': cluster['cluster_name'],
+                'Category #': idx,
+                'Category Name': cluster['cluster_name'],
                 'Search Intent': cluster['search_intent'],
                 'Keyword': kw,
-                'Description': cluster['description'],
-                'Cluster Size': len(cluster['keywords'])
+                'Intent Description': cluster['description'],
+                'Category Size': len(cluster['keywords'])
             })
     
     df = pd.DataFrame(table_data)
@@ -329,40 +462,41 @@ if 'clustering_results' in st.session_state:
     # Excel export
     excel_buffer = BytesIO()
     with pd.ExcelWriter(excel_buffer, engine='openpyxl') as writer:
-        df.to_excel(writer, sheet_name='Clusters', index=False)
+        df.to_excel(writer, sheet_name='Categories', index=False)
         
         summary_df = pd.DataFrame([{
             'Total Keywords Input': result['summary']['total_keywords_input'],
-            'Total Keywords Clustered': result['summary']['total_keywords'],
-            'Total Clusters': result['summary']['total_clusters'],
+            'Total Keywords Categorized': result['summary']['total_keywords'],
+            'Total Categories': result['summary']['total_clusters'],
             'Commercial': result['summary']['commercial_clusters'],
             'Transactional': result['summary']['transactional_clusters'],
-            'Informational': result['summary']['informational_clusters']
+            'Informational': result['summary']['informational_clusters'],
+            'Navigational': result['summary'].get('navigational_clusters', 0)
         }])
         summary_df.to_excel(writer, sheet_name='Summary', index=False)
         
-        cluster_summary = []
+        category_summary = []
         for idx, cluster in enumerate(result['clusters'], 1):
-            cluster_summary.append({
-                'Cluster #': idx,
-                'Cluster Name': cluster['cluster_name'],
+            category_summary.append({
+                'Category #': idx,
+                'Category Name': cluster['cluster_name'],
                 'Search Intent': cluster['search_intent'],
                 'Keywords Count': len(cluster['keywords']),
-                'Description': cluster['description']
+                'Intent Description': cluster['description']
             })
         
-        cluster_df = pd.DataFrame(cluster_summary)
-        cluster_df.to_excel(writer, sheet_name='Cluster Overview', index=False)
+        category_df = pd.DataFrame(category_summary)
+        category_df.to_excel(writer, sheet_name='Category Overview', index=False)
     
     excel_buffer.seek(0)
     
     st.download_button(
         label="📥 Download Excel",
         data=excel_buffer,
-        file_name=f"clustering_{time.strftime('%Y%m%d_%H%M%S')}.xlsx",
+        file_name=f"keyword_categorization_{time.strftime('%Y%m%d_%H%M%S')}.xlsx",
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         use_container_width=True
     )
     
     st.markdown("---")
-    st.markdown(f"**Powered by Claude Sonnet 4.5** • {result['summary']['total_keywords']}/{result['summary']['total_keywords_input']} keywords • {result['summary']['total_clusters']} clusters")
+    st.markdown(f"**Powered by Claude Sonnet 4.5** • {result['summary']['total_keywords']}/{result['summary']['total_keywords_input']} keywords • {result['summary']['total_clusters']} categories")
