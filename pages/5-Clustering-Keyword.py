@@ -120,9 +120,9 @@ with st.sidebar:
     
     batch_size_option = st.selectbox(
         "Batch size (keywords)",
-        [150, 300, 500],
+        [100, 150, 200, 300],
         index=1,
-        help="Riduci se hai errori JSON troncati o rate limit"
+        help="IMPORTANTE: Riduci a 100-150 se vedi errori JSON troncati"
     )
     
     st.markdown("---")
@@ -344,7 +344,7 @@ JSON FORMAT:
                 try:
                     response = client.messages.create(
                         model="claude-sonnet-4-20250514",
-                        max_tokens=16000,  # Aumentato per batch grandi
+                        max_tokens=20000,  # Aumentato per evitare troncamenti
                         messages=[{"role": "user", "content": prompt}]
                     )
                     break
@@ -390,20 +390,71 @@ JSON FORMAT:
             
             # FIX: Se il JSON è troncato, prova a chiuderlo
             if not result_text.endswith("]}"):
-                # Conta parentesi aperte
+                st.warning(f"⚠️ Batch {batch_idx+1}: Risposta troncata, tentativo di recupero...")
+                
+                # Trova l'ultimo oggetto keyword completo
+                last_complete_kw = result_text.rfind('{"keyword":')
+                last_closing_brace = result_text.rfind('}')
+                
+                # Se l'ultimo } non chiude un oggetto keyword completo, rimuovilo
+                if last_closing_brace > last_complete_kw:
+                    # Cerca il precedente keyword completo
+                    prev_complete = result_text.rfind('},', 0, last_complete_kw)
+                    if prev_complete != -1:
+                        result_text = result_text[:prev_complete+1]
+                
+                # Chiudi la struttura correttamente
+                # Conta le strutture aperte
                 open_brackets = result_text.count("[") - result_text.count("]")
                 open_braces = result_text.count("{") - result_text.count("}")
                 
-                # Cerca l'ultima virgola e tronca lì
-                last_complete = result_text.rfind("},")
-                if last_complete != -1:
-                    result_text = result_text[:last_complete+1]
-                    # Chiudi correttamente
-                    result_text += "\n  ]\n}"
-                    st.warning(f"⚠️ Batch {batch_idx+1}: JSON troncato, recuperate keyword parziali")
+                # Chiudi array keywords se necessario
+                if open_brackets > 0:
+                    result_text += "\n      ]"
+                
+                # Chiudi oggetto cluster se necessario
+                if open_braces > 1:
+                    result_text += "\n    }"
+                
+                # Chiudi array clusters
+                if open_brackets > 1 or result_text.count('"clusters"') > 0:
+                    result_text += "\n  ]"
+                
+                # Chiudi oggetto root
+                result_text += "\n}"
+                
+                st.info(f"💡 Batch {batch_idx+1}: JSON ricostruito, alcune keyword potrebbero mancare")
             
             try:
                 batch_result = json.loads(result_text)
+                
+                # Validazione struttura
+                if not isinstance(batch_result, dict) or 'clusters' not in batch_result:
+                    st.error(f"❌ Batch {batch_idx+1}: Struttura JSON invalida")
+                    st.code(result_text[:500])
+                    return None, "Struttura JSON non valida"
+                
+                if not isinstance(batch_result['clusters'], list):
+                    st.error(f"❌ Batch {batch_idx+1}: 'clusters' non è una lista")
+                    return None, "Formato clusters non valido"
+                
+                # Pulisci clusters vuoti o malformati
+                valid_clusters = []
+                for cluster in batch_result['clusters']:
+                    if isinstance(cluster, dict) and 'keywords' in cluster and isinstance(cluster['keywords'], list):
+                        # Filtra keywords valide
+                        valid_keywords = []
+                        for kw in cluster['keywords']:
+                            if isinstance(kw, dict) and 'keyword' in kw:
+                                valid_keywords.append(kw)
+                            elif isinstance(kw, str):
+                                valid_keywords.append({'keyword': kw, 'brand': None})
+                        
+                        if valid_keywords:
+                            cluster['keywords'] = valid_keywords
+                            valid_clusters.append(cluster)
+                
+                batch_result['clusters'] = valid_clusters
                 
                 # Count keywords
                 batch_kw_count = sum(len(c['keywords']) for c in batch_result['clusters'])
@@ -417,8 +468,16 @@ JSON FORMAT:
                 all_clusters.extend(batch_result['clusters'])
                 
             except json.JSONDecodeError as e:
-                st.error(f"❌ Batch {batch_idx+1}: errore JSON")
+                st.error(f"❌ Batch {batch_idx+1}: errore JSON - {str(e)}")
                 st.code(result_text[:500] + "\n...\n" + result_text[-200:])
+                
+                # Mostra debug info
+                with st.expander("🔍 Debug Info"):
+                    st.text(f"Lunghezza risposta: {len(result_text)} caratteri")
+                    st.text(f"Carattere errore: {e.pos if hasattr(e, 'pos') else 'N/A'}")
+                    st.text(f"Aperti [: {result_text.count('[') - result_text.count(']')}")
+                    st.text(f"Aperti {{: {result_text.count('{') - result_text.count('}')}")
+                
                 return None, f"JSON error: {str(e)}"
         
         # Count total
