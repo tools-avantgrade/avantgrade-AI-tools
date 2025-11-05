@@ -78,11 +78,6 @@ with st.sidebar:
 
     st.markdown("---")
 
-    language = st.selectbox(
-        "Lingua",
-        ["Italiano", "English", "Español", "Français", "Deutsch"]
-    )
-
     clustering_mode = st.radio(
         "Modalità Clustering",
         ["Auto (AI genera categorie)", "Custom (tu definisci categorie)"],
@@ -120,6 +115,8 @@ with st.sidebar:
     st.markdown("---")
     st.markdown("**Modello:** Claude Sonnet 4.5")
     st.markdown("**Max keywords:** 5000+")
+    st.markdown("**Output:** Always English")
+    st.markdown("**Input:** All languages supported")
     st.markdown("**⚠️ Rate limit:** 60s delay tra batch")
 
 # ===============================
@@ -132,8 +129,8 @@ with col_input1:
     keywords_input = st.text_area(
         "Inserisci le keyword (una per riga)",
         height=400,
-        placeholder="armani lipstick\nbest base makeup for oily skin\nbad gal 24 hour eye pencil waterproof black 0.25 g\ncheap mascara\n...",
-        help="Una keyword per riga. Supporta fino a 5000+ keywords."
+        placeholder="armani lipstick\nbest base makeup for oily skin\nbad gal 24 hour eye pencil waterproof black 0.25 g\ncheap mascara\nmascara waterproof\n...",
+        help="Una keyword per riga. Supporta qualsiasi lingua. Supporta fino a 5000+ keywords."
     )
 
 with col_input2:
@@ -215,7 +212,7 @@ with col_input2:
 st.markdown("""
 <div class='info-box'>
 💡 <strong>Intent-Based Clustering:</strong> Keywords categorizzate per MOTIVO della ricerca, non per tipo di prodotto.
-Brand rilevati automaticamente in colonna separata. Le descrizioni guidano l'AI nell'assegnazione corretta.
+Brand rilevati automaticamente in colonna separata. Output sempre in inglese. Tutte le lingue supportate in input.
 </div>
 """, unsafe_allow_html=True)
 
@@ -266,7 +263,7 @@ def normalize_clusters(batch_result):
 # ===============================
 # Funzione clustering (Claude)
 # ===============================
-def cluster_keywords_claude(keywords_list, api_key, language, min_size, max_clusters, batch_size, custom_cats, mode):
+def cluster_keywords_claude(keywords_list, api_key, min_size, max_clusters, batch_size, custom_cats, mode):
     try:
         client = Anthropic(api_key=api_key)
         all_clusters = []
@@ -298,20 +295,25 @@ def cluster_keywords_claude(keywords_list, api_key, language, min_size, max_clus
 
                 prompt = f"""You are an expert SEO keyword intent analyzer.
 
+CRITICAL INSTRUCTIONS:
+- ALWAYS respond in ENGLISH (category names, descriptions in English)
+- Keywords can be in ANY language - you must understand them all
+- Output JSON with English category names and descriptions
+
 TASK: Categorize keywords by USER SEARCH INTENT (why they're searching), NOT by product type.
 
-KEYWORDS ({len(batch_keywords)}):
+KEYWORDS ({len(batch_keywords)} - may be in any language):
 {chr(10).join(f"{i+1}. {kw}" for i, kw in enumerate(batch_keywords))}
 
-YOUR PREDEFINED CATEGORIES WITH DESCRIPTIONS:
+YOUR PREDEFINED CATEGORIES WITH DESCRIPTIONS (in English):
 {categories_text}
 
 IMPORTANT: Use the category DESCRIPTIONS as your PRIMARY guide for assignment.
 Each description tells you EXACTLY what kind of keywords belong in that category.
 
 BRAND DETECTION:
-- If keyword contains a recognizable brand name (Armani, Dior, MAC, Nike, Apple, etc.), extract it
-- Put brand name in "brand" field
+- If keyword contains a recognizable brand name (Armani, Dior, MAC, Nike, Apple, Samsung, etc.), extract it
+- Put brand name in "brand" field (capitalize properly)
 - Do NOT create "Brand Specific" categories
 
 RULES:
@@ -319,20 +321,21 @@ RULES:
 - EVERY keyword must be categorized (all {len(batch_keywords)})
 - Min {min_size} keywords/category (flexible)
 - Think: "WHY is the user searching this?" and match to category description
-- Keep your "description" field SHORT (max 10 words)
+- Keep your "description" field SHORT (max 10 words, in English)
+- Category names and descriptions MUST be in English
 
 JSON FORMAT:
 {{
   "clusters": [
     {{
-      "cluster_name": "Exact category name from list",
+      "cluster_name": "Exact category name from list (English)",
       "keywords": [
         {{
-          "keyword": "the keyword",
+          "keyword": "the keyword (original language)",
           "brand": "Brand Name or null"
         }}
       ],
-      "description": "Brief reason for grouping"
+      "description": "Brief reason for grouping (English, max 10 words)"
     }}
   ]
 }}"""
@@ -340,59 +343,66 @@ JSON FORMAT:
                 # AUTO mode - genera categorie
                 prompt = f"""You are an expert SEO keyword intent analyzer.
 
+CRITICAL INSTRUCTIONS:
+- ALWAYS respond in ENGLISH (category names, descriptions in English)
+- Keywords can be in ANY language - you must understand them all
+- Output JSON with English category names and descriptions
+
 TASK: Categorize keywords by USER SEARCH INTENT (why they're searching), NOT by product type.
 
-KEYWORDS ({len(batch_keywords)}):
+KEYWORDS ({len(batch_keywords)} - may be in any language):
 {chr(10).join(f"{i+1}. {kw}" for i, kw in enumerate(batch_keywords))}
 
-INTENT CATEGORIZATION LOGIC:
+INTENT CATEGORIZATION LOGIC (create categories with English names):
 
 1. **Generic**: Vague, broad searches with NO specific intent signals
-   Examples: "armani lipstick", "nike shoes", "samsung phone"
+   Examples: "armani lipstick", "nike shoes", "samsung phone", "rossetto", "zapatos"
 
 2. **Buy / Compare**: Contains comparison or shopping modifiers
-   Examples: "best base makeup for oily skin", "top 10 laptops"
-   Words: best, top, vs, comparison, review
+   Examples: "best base makeup for oily skin", "top 10 laptops", "migliori smartphone"
+   Words: best, top, vs, comparison, review, migliori, mejores, etc.
 
 3. **Feature or Finish**: SPECIFIC attributes/characteristics
-   Examples: "waterproof mascara", "matte red lipstick", "24 hour pencil waterproof"
+   Examples: "waterproof mascara", "matte red lipstick", "mascara impermeabile"
 
 4. **Price Related**: Budget-focused
-   Examples: "cheap mascara", "luxury skincare", "affordable laptop"
+   Examples: "cheap mascara", "luxury skincare", "economico", "barato"
 
 5. **Problem / Solution**: Addresses specific problem
    Examples: "mascara that doesn't smudge", "laptop for gaming"
 
 6. **Tutorial / How To**: Educational
-   Examples: "how to apply mascara", "makeup tutorial"
+   Examples: "how to apply mascara", "makeup tutorial", "come applicare"
 
 7. **Application Area**: Specific use case/location
    Examples: "mascara for sensitive eyes", "running shoes for flat feet"
 
 BRAND DETECTION:
 - Extract recognizable brand names to "brand" field
+- Capitalize properly (Armani, Nike, Samsung, etc.)
 - Do NOT create "Brand Specific" categories
 
-CREATE: 5-{max_clusters} intent categories
+CREATE: 5-{max_clusters} intent categories with English names
 RULES:
 - EVERY keyword must be categorized (all {len(batch_keywords)})
 - Min {min_size} keywords/category (flexible)
 - Think: "WHY is the user searching this?"
 - Focus on INTENT, not product type
-- Keep "description" field SHORT (max 10 words)
+- Keep "description" field SHORT (max 10 words, in English)
+- Category names MUST be in English
 
 JSON FORMAT:
 {{
   "clusters": [
     {{
-      "cluster_name": "Intent Category Name",
+      "cluster_name": "Intent Category Name (English)",
       "keywords": [
         {{
-          "keyword": "the keyword",
+          "keyword": "the keyword (original language)",
           "brand": "Brand Name or null"
         }}
       ],
-      "description": "Brief reason"
+      "description": "Brief reason (English, max 10 words)"
     }}
   ]
 }}"""
@@ -539,7 +549,6 @@ if analyze_btn:
                 result, error = cluster_keywords_claude(
                     keywords_list,
                     api_key,
-                    language,
                     min_cluster_size,
                     max_clusters,
                     batch_size_option,
