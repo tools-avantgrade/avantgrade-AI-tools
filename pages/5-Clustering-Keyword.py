@@ -131,29 +131,83 @@ with col_input1:
     st.markdown("### 📝 Input Keywords")
     keywords_input = st.text_area(
         "Inserisci le keyword (una per riga)",
-        height=300,
+        height=400,
         placeholder="armani lipstick\nbest base makeup for oily skin\nbad gal 24 hour eye pencil waterproof black 0.25 g\ncheap mascara\n...",
         help="Una keyword per riga. Supporta fino a 5000+ keywords."
     )
 
 with col_input2:
-    st.markdown("### 🎯 Categorie Custom (Opzionale)")
+    st.markdown("### 🎯 Categorie Custom")
 
     if clustering_mode == "Custom (tu definisci categorie)":
-        st.markdown("**OBBLIGATORIO** - Inserisci le tue categorie:")
+        st.markdown("**OBBLIGATORIO** - Definisci categoria + descrizione:")
     else:
-        st.markdown("**OPZIONALE** - Suggerisci categorie iniziali:")
+        st.markdown("**OPZIONALE** - Suggerisci categorie + descrizione:")
 
-    custom_categories = st.text_area(
-        "Categorie predefinite",
-        height=300,
-        placeholder="Generic\nBuy / Compare\nFeature or Finish\nPrice Related\nProblem / Solution\nTutorial / How To\n...",
-        help="Una categoria per riga. L'AI userà queste come base."
-    )
+    # Initialize session state for categories
+    if 'custom_categories_list' not in st.session_state:
+        st.session_state['custom_categories_list'] = [
+            {"name": "Generic", "description": "Broad searches with no specific intent signals (e.g., 'armani lipstick', 'nike shoes')"},
+            {"name": "Buy / Compare", "description": "Shopping/comparison intent with words like 'best', 'top', 'vs', 'review' (e.g., 'best laptop 2024')"},
+            {"name": "Feature or Finish", "description": "Specific attributes, specs, colors, finishes (e.g., 'waterproof mascara', 'matte red lipstick')"}
+        ]
 
-    if custom_categories.strip():
-        categories_list = [cat.strip() for cat in custom_categories.strip().split('\n') if cat.strip()]
-        st.info(f"✅ {len(categories_list)} categorie definite")
+    # Display existing categories with inline editing
+    for idx, cat in enumerate(st.session_state['custom_categories_list']):
+        col_name, col_desc, col_delete = st.columns([2, 5, 0.5])
+        
+        with col_name:
+            cat_name = st.text_input(
+                "Categoria",
+                value=cat['name'],
+                key=f"cat_name_{idx}",
+                label_visibility="collapsed",
+                placeholder="Nome categoria..."
+            )
+            st.session_state['custom_categories_list'][idx]['name'] = cat_name
+        
+        with col_desc:
+            cat_desc = st.text_input(
+                "Descrizione",
+                value=cat['description'],
+                key=f"cat_desc_{idx}",
+                label_visibility="collapsed",
+                placeholder="Descrizione dettagliata dell'intento di ricerca..."
+            )
+            st.session_state['custom_categories_list'][idx]['description'] = cat_desc
+        
+        with col_delete:
+            if st.button("🗑️", key=f"delete_{idx}", help="Elimina categoria", use_container_width=True):
+                st.session_state['custom_categories_list'].pop(idx)
+                st.rerun()
+        
+        # Spacer
+        st.markdown("<div style='margin-bottom: 0.5rem;'></div>", unsafe_allow_html=True)
+
+    # Action buttons
+    col_add, col_clear = st.columns([1, 1])
+    
+    with col_add:
+        if st.button("➕ Aggiungi Categoria", use_container_width=True):
+            st.session_state['custom_categories_list'].append({
+                "name": "",
+                "description": ""
+            })
+            st.rerun()
+    
+    with col_clear:
+        if st.button("🔄 Reset Default", use_container_width=True):
+            st.session_state['custom_categories_list'] = [
+                {"name": "Generic", "description": "Broad searches with no specific intent signals (e.g., 'armani lipstick', 'nike shoes')"},
+                {"name": "Buy / Compare", "description": "Shopping/comparison intent with words like 'best', 'top', 'vs', 'review' (e.g., 'best laptop 2024')"},
+                {"name": "Feature or Finish", "description": "Specific attributes, specs, colors, finishes (e.g., 'waterproof mascara', 'matte red lipstick')"}
+            ]
+            st.rerun()
+
+    # Count valid categories
+    valid_cats = [c for c in st.session_state['custom_categories_list'] if c['name'].strip()]
+    if valid_cats:
+        st.success(f"✅ {len(valid_cats)} categorie definite con descrizione")
 
 # ===============================
 # Info box
@@ -161,14 +215,14 @@ with col_input2:
 st.markdown("""
 <div class='info-box'>
 💡 <strong>Intent-Based Clustering:</strong> Keywords categorizzate per MOTIVO della ricerca, non per tipo di prodotto.
-Brand rilevati automaticamente in colonna separata.
+Brand rilevati automaticamente in colonna separata. Le descrizioni guidano l'AI nell'assegnazione corretta.
 </div>
 """, unsafe_allow_html=True)
 
-if clustering_mode == "Custom (tu definisci categorie)" and not custom_categories.strip():
+if clustering_mode == "Custom (tu definisci categorie)" and len(valid_cats) < 3:
     st.markdown("""
     <div class='warning-box'>
-    ⚠️ <strong>Modalità Custom attiva:</strong> Devi inserire almeno 3 categorie custom nel campo a destra.
+    ⚠️ <strong>Modalità Custom attiva:</strong> Devi definire almeno 3 categorie con nome e descrizione.
     </div>
     """, unsafe_allow_html=True)
 
@@ -188,11 +242,9 @@ def normalize_clusters(batch_result):
         if not isinstance(kw_list, list):
             continue
 
-        # normalizza campi del cluster
         cluster['cluster_name'] = cluster.get('cluster_name', 'Uncategorized')
         cluster['description'] = cluster.get('description', '')
 
-        # normalizza le keywords
         valid_keywords = []
         for kw in kw_list:
             if isinstance(kw, dict):
@@ -231,14 +283,18 @@ def cluster_keywords_claude(keywords_list, api_key, language, min_size, max_clus
             if total_batches > 1:
                 st.text(f"📦 Batch {batch_idx + 1}/{total_batches}: keywords {start_idx+1}-{end_idx}")
 
-            # Prompt
-            if mode == "Custom (tu definisci categorie)" or (custom_cats and len(custom_cats) > 0):
-                categories_text = "\n".join(f"- {cat}" for cat in custom_cats)
-
+            # Costruisci testo categorie con descrizioni
+            if custom_cats and len(custom_cats) > 0:
+                categories_text = "\n".join(
+                    f"- **{cat['name']}**: {cat['description']}" 
+                    for cat in custom_cats 
+                    if cat['name'].strip()
+                )
+                
                 if mode == "Custom (tu definisci categorie)":
-                    extra_instruction = f"Use ONLY these {len(custom_cats)} categories."
+                    extra_instruction = f"Use ONLY these {len(custom_cats)} categories with their descriptions as guidance."
                 else:
-                    extra_instruction = f"Prefer these {len(custom_cats)} categories. Create max {max_clusters} additional if needed."
+                    extra_instruction = f"Prefer these {len(custom_cats)} categories. Create max {max_clusters} additional ONLY if absolutely needed."
 
                 prompt = f"""You are an expert SEO keyword intent analyzer.
 
@@ -247,34 +303,11 @@ TASK: Categorize keywords by USER SEARCH INTENT (why they're searching), NOT by 
 KEYWORDS ({len(batch_keywords)}):
 {chr(10).join(f"{i+1}. {kw}" for i, kw in enumerate(batch_keywords))}
 
-YOUR CATEGORIES:
+YOUR PREDEFINED CATEGORIES WITH DESCRIPTIONS:
 {categories_text}
 
-INTENT CATEGORIZATION LOGIC:
-
-1. **Generic**: Vague, broad searches with NO specific intent signals
-   Examples: "armani lipstick", "nike shoes", "samsung phone"
-   → User is just browsing, no clear goal
-
-2. **Buy / Compare**: Contains comparison or shopping modifiers
-   Examples: "best base makeup for oily skin", "top 10 laptops", "iphone vs samsung"
-   → Words like: best, top, vs, comparison, review, affordable
-
-3. **Feature or Finish**: Describes SPECIFIC attributes or characteristics
-   Examples: "waterproof mascara", "bad gal 24 hour eye pencil waterproof black 0.25 g", "matte red lipstick"
-   → Has detailed specs, features, colors, finishes
-
-4. **Price Related**: Budget-focused searches
-   Examples: "cheap mascara", "luxury skincare", "affordable laptop"
-   → Words like: cheap, expensive, luxury, budget, affordable, under $X
-
-5. **Problem / Solution**: Addresses a specific problem
-   Examples: "mascara that doesn't smudge", "laptop for gaming", "phone with best camera"
-   → User has a problem to solve
-
-6. **Tutorial / How To**: Educational intent
-   Examples: "how to apply mascara", "makeup tutorial", "nail art ideas"
-   → Words like: how to, tutorial, guide, tips, ideas
+IMPORTANT: Use the category DESCRIPTIONS as your PRIMARY guide for assignment.
+Each description tells you EXACTLY what kind of keywords belong in that category.
 
 BRAND DETECTION:
 - If keyword contains a recognizable brand name (Armani, Dior, MAC, Nike, Apple, etc.), extract it
@@ -285,25 +318,26 @@ RULES:
 - {extra_instruction}
 - EVERY keyword must be categorized (all {len(batch_keywords)})
 - Min {min_size} keywords/category (flexible)
-- Think: "WHY is the user searching this?"
-- Keep "description" field SHORT (max 10 words)
+- Think: "WHY is the user searching this?" and match to category description
+- Keep your "description" field SHORT (max 10 words)
 
 JSON FORMAT:
 {{
   "clusters": [
     {{
-      "cluster_name": "Category from list",
+      "cluster_name": "Exact category name from list",
       "keywords": [
         {{
           "keyword": "the keyword",
           "brand": "Brand Name or null"
         }}
       ],
-      "description": "Why these share same intent"
+      "description": "Brief reason for grouping"
     }}
   ]
 }}"""
             else:
+                # AUTO mode - genera categorie
                 prompt = f"""You are an expert SEO keyword intent analyzer.
 
 TASK: Categorize keywords by USER SEARCH INTENT (why they're searching), NOT by product type.
@@ -315,35 +349,28 @@ INTENT CATEGORIZATION LOGIC:
 
 1. **Generic**: Vague, broad searches with NO specific intent signals
    Examples: "armani lipstick", "nike shoes", "samsung phone"
-   → User is just browsing, no clear goal
 
 2. **Buy / Compare**: Contains comparison or shopping modifiers
-   Examples: "best base makeup for oily skin", "top 10 laptops", "iphone vs samsung"
-   → Words like: best, top, vs, comparison, review, affordable
+   Examples: "best base makeup for oily skin", "top 10 laptops"
+   Words: best, top, vs, comparison, review
 
-3. **Feature or Finish**: Describes SPECIFIC attributes or characteristics
-   Examples: "waterproof mascara", "bad gal 24 hour eye pencil waterproof black 0.25 g", "matte red lipstick"
-   → Has detailed specs, features, colors, finishes
+3. **Feature or Finish**: SPECIFIC attributes/characteristics
+   Examples: "waterproof mascara", "matte red lipstick", "24 hour pencil waterproof"
 
-4. **Price Related**: Budget-focused searches
+4. **Price Related**: Budget-focused
    Examples: "cheap mascara", "luxury skincare", "affordable laptop"
-   → Words like: cheap, expensive, luxury, budget, affordable, under $X
 
-5. **Problem / Solution**: Addresses a specific problem
-   Examples: "mascara that doesn't smudge", "laptop for gaming", "phone with best camera"
-   → User has a problem to solve
+5. **Problem / Solution**: Addresses specific problem
+   Examples: "mascara that doesn't smudge", "laptop for gaming"
 
-6. **Tutorial / How To**: Educational intent
-   Examples: "how to apply mascara", "makeup tutorial", "nail art ideas"
-   → Words like: how to, tutorial, guide, tips, ideas
+6. **Tutorial / How To**: Educational
+   Examples: "how to apply mascara", "makeup tutorial"
 
-7. **Application Area**: Specific use case or body part/location
+7. **Application Area**: Specific use case/location
    Examples: "mascara for sensitive eyes", "running shoes for flat feet"
-   → Specifies WHERE/WHEN it's used
 
 BRAND DETECTION:
-- If keyword contains a recognizable brand name, extract it
-- Put brand name in "brand" field
+- Extract recognizable brand names to "brand" field
 - Do NOT create "Brand Specific" categories
 
 CREATE: 5-{max_clusters} intent categories
@@ -365,7 +392,7 @@ JSON FORMAT:
           "brand": "Brand Name or null"
         }}
       ],
-      "description": "Why these share same search intent"
+      "description": "Brief reason"
     }}
   ]
 }}"""
@@ -395,7 +422,7 @@ JSON FORMAT:
                     else:
                         return None, f"Errore API: {str(e)}"
 
-            # Delay tra batch (per sicurezza)
+            # Delay tra batch
             if batch_idx < total_batches - 1:
                 st.info("⏱️ Pausa 60s per rate limit...")
                 time.sleep(60)
@@ -404,13 +431,13 @@ JSON FORMAT:
             if not result_text:
                 return None, f"Batch {batch_idx+1}: risposta vuota"
 
-            # Clean markdown fences
+            # Clean markdown
             if "```json" in result_text:
                 result_text = result_text.split("```json")[1].split("```")[0].strip()
             elif "```" in result_text:
                 result_text = result_text.split("```")[1].split("```")[0].strip()
 
-            # Estrai JSON grezzo
+            # Extract JSON
             start = result_text.find("{")
             end = result_text.rfind("}")
             if start == -1 or end == -1:
@@ -420,13 +447,11 @@ JSON FORMAT:
 
             result_text = result_text[start:end+1]
 
-            # Tentativo di chiusura se troncato
+            # Tentativo chiusura se troncato
             if not result_text.endswith("}"):
-                st.warning(f"⚠️ Batch {batch_idx+1}: Risposta troncata, tentativo di recupero...")
-                # Chiudi in modo conservativo
+                st.warning(f"⚠️ Batch {batch_idx+1}: Risposta troncata, tentativo recupero...")
                 open_brackets = result_text.count("[") - result_text.count("]")
                 open_braces = result_text.count("{") - result_text.count("}")
-
                 if open_brackets > 0:
                     result_text += "]" * open_brackets
                 if open_braces > 0:
@@ -436,7 +461,6 @@ JSON FORMAT:
             try:
                 batch_result = json.loads(result_text)
 
-                # validazione & normalizzazione
                 if not isinstance(batch_result, dict) or 'clusters' not in batch_result:
                     st.error(f"❌ Batch {batch_idx+1}: Struttura JSON invalida")
                     st.code(result_text[:500])
@@ -445,7 +469,6 @@ JSON FORMAT:
                 normalized = normalize_clusters(batch_result)
                 batch_result['clusters'] = normalized
 
-                # Conteggio
                 batch_kw_count = sum(len(c.get('keywords', [])) for c in batch_result['clusters'])
                 if batch_kw_count < len(batch_keywords):
                     missing = len(batch_keywords) - batch_kw_count
@@ -459,9 +482,9 @@ JSON FORMAT:
                 st.error(f"❌ Batch {batch_idx+1}: errore JSON - {str(e)}")
                 st.code(result_text[:500] + "\n...\n" + result_text[-200:])
                 with st.expander("🔍 Debug Info"):
-                    st.text(f"Lunghezza risposta: {len(result_text)} caratteri")
-                    st.text(f"Aperti [: {result_text.count('[') - result_text.count(']')}")
-                    st.text(f"Aperti {{: {result_text.count('{') - result_text.count('}')}")
+                    st.text(f"Lunghezza: {len(result_text)} chars")
+                    st.text(f"[ : {result_text.count('[') - result_text.count(']')}")
+                    st.text(f"{{ : {result_text.count('{') - result_text.count('}')}")
                 return None, f"JSON error: {str(e)}"
 
         # Totali
@@ -501,18 +524,12 @@ if analyze_btn:
         st.error("⚠️ Inserisci Anthropic API Key")
     elif not keywords_input.strip():
         st.error("⚠️ Inserisci almeno una keyword")
-    elif clustering_mode == "Custom (tu definisci categorie)" and not custom_categories.strip():
-        st.error("⚠️ Modalità Custom: inserisci almeno 3 categorie custom")
+    elif clustering_mode == "Custom (tu definisci categorie)" and len(valid_cats) < 3:
+        st.error("⚠️ Modalità Custom: inserisci almeno 3 categorie con nome e descrizione")
     else:
         keywords_list = [kw.strip() for kw in keywords_input.strip().split('\n') if kw.strip()]
 
-        custom_cats_list = []
-        if custom_categories.strip():
-            custom_cats_list = [cat.strip() for cat in custom_categories.strip().split('\n') if cat.strip()]
-
-        if clustering_mode == "Custom (tu definisci categorie)" and len(custom_cats_list) < 3:
-            st.error("⚠️ Modalità Custom: inserisci almeno 3 categorie")
-        elif len(keywords_list) < 3:
+        if len(keywords_list) < 3:
             st.warning("⚠️ Minimo 3 keywords richieste")
         else:
             with st.spinner('🤖 Clustering intent-based con Claude...'):
@@ -526,7 +543,7 @@ if analyze_btn:
                     min_cluster_size,
                     max_clusters,
                     batch_size_option,
-                    custom_cats_list,
+                    valid_cats,
                     clustering_mode
                 )
 
@@ -584,13 +601,11 @@ if 'clustering_results' in st.session_state:
 
     st.markdown("---")
 
-    # ===== Export Excel =====
+    # Excel export
     excel_buffer = BytesIO()
     with pd.ExcelWriter(excel_buffer, engine='openpyxl') as writer:
-        # Sheet 1: flat table
         df.to_excel(writer, sheet_name='Categories', index=False)
 
-        # Sheet 2: summary
         summary_df = pd.DataFrame([{
             'Total Keywords Input': result['summary'].get('total_keywords_input', 0),
             'Total Keywords Categorized': result['summary'].get('total_keywords', 0),
@@ -599,7 +614,6 @@ if 'clustering_results' in st.session_state:
         }])
         summary_df.to_excel(writer, sheet_name='Summary', index=False)
 
-        # Sheet 3: category overview
         category_summary = []
         for idx, cluster in enumerate(result.get('clusters', []), 1):
             category_summary.append({
