@@ -24,6 +24,11 @@ st.markdown("""
         border: 1px solid #FF6B35 !important;
         font-family: monospace;
     }
+    .stTextInput input {
+        background-color: #1a1a1a !important;
+        color: #ffffff !important;
+        border: 1px solid #FF6B35 !important;
+    }
     .stButton>button {
         background-color: #FF6B35;
         color: white;
@@ -54,6 +59,11 @@ st.markdown("""
         margin: 1rem 0;
         color: #cccccc;
     }
+    .compact-label {
+        font-size: 0.9rem;
+        color: #cccccc;
+        margin-bottom: 0.3rem;
+    }
     </style>
 """, unsafe_allow_html=True)
 
@@ -65,7 +75,7 @@ st.markdown("**AI-powered intent-based clustering con Claude Sonnet 4.5**")
 st.markdown("---")
 
 # ===============================
-# Sidebar
+# Sidebar (Minimal)
 # ===============================
 with st.sidebar:
     st.markdown("### ⚙️ Configurazione")
@@ -81,148 +91,154 @@ with st.sidebar:
     clustering_mode = st.radio(
         "Modalità Clustering",
         ["Auto (AI genera categorie)", "Custom (tu definisci categorie)"],
-        help="Auto: AI crea categorie da zero. Custom: usi le tue categorie predefinite"
+        help="Auto: AI crea categorie da zero. Custom: usi le tue 4 categorie predefinite"
     )
 
     st.markdown("---")
 
-    if clustering_mode == "Auto (AI genera categorie)":
-        max_clusters = st.slider(
-            "Max categorie da generare",
-            5, 30, 15,
-            help="Numero massimo di categorie che l'AI può creare"
-        )
-    else:
-        max_clusters = st.slider(
-            "Categorie extra da generare",
-            0, 10, 2,
-            help="Categorie aggiuntive se quelle custom non bastano"
-        )
-
-    min_cluster_size = st.slider(
-        "Min keywords per categoria",
-        1, 10, 2,
-        help="Minimo keywords per categoria (flessibile)"
-    )
-
     batch_size_option = st.selectbox(
-        "Batch size (keywords)",
-        [100, 150, 200, 300],
+        "Batch size",
+        [100, 150, 200],
         index=1,
-        help="IMPORTANTE: Riduci a 100-150 se vedi errori JSON troncati"
+        help="⚠️ Riduci a 100 se vedi errori JSON"
     )
 
     st.markdown("---")
     st.markdown("**Modello:** Claude Sonnet 4.5")
     st.markdown("**Max keywords:** 5000+")
     st.markdown("**Output:** Always English")
-    st.markdown("**Input:** All languages supported")
-    st.markdown("**⚠️ Rate limit:** 60s delay tra batch")
+    st.markdown("**⚠️ Delay:** 60s tra batch")
 
 # ===============================
-# Input
+# Input Section
 # ===============================
 col_input1, col_input2 = st.columns([1, 1])
 
 with col_input1:
-    st.markdown("### 📝 Input Keywords")
+    st.markdown("### 📝 Input Keywords & Context")
+    
+    # Keywords input
     keywords_input = st.text_area(
-        "Inserisci le keyword (una per riga)",
-        height=400,
-        placeholder="armani lipstick\nbest base makeup for oily skin\nbad gal 24 hour eye pencil waterproof black 0.25 g\ncheap mascara\nmascara waterproof\n...",
-        help="Una keyword per riga. Supporta qualsiasi lingua. Supporta fino a 5000+ keywords."
+        "Keywords (una per riga)",
+        height=200,
+        placeholder="armani lipstick\nbest base makeup for oily skin\ncorrettore kiko\nmascara waterproof\nshop near me\n...",
+        help="Una keyword per riga. Qualsiasi lingua. Fino a 5000+ keywords."
+    )
+    
+    # Product list input
+    st.markdown("<div class='compact-label'>🏷️ Lista Prodotti (opzionale ma consigliato)</div>", unsafe_allow_html=True)
+    products_input = st.text_area(
+        "prodotti",
+        height=100,
+        placeholder="correttore\nfondotinta\nmascara\nmatita occhi\nrossetto\n...",
+        help="Lista prodotti del tuo brand. Aiuta l'AI a capire il contesto (es. 'correttore' è un prodotto, non un accessorio)",
+        label_visibility="collapsed"
+    )
+    
+    # Macro theme input
+    st.markdown("<div class='compact-label'>🎯 Macrotema/i (opzionale)</div>", unsafe_allow_html=True)
+    macro_theme_input = st.text_input(
+        "macrotema",
+        placeholder="Makeup, Beauty, Cosmetics",
+        help="Tema generale della keyword research. Puoi inserirne più di uno separati da virgola",
+        label_visibility="collapsed"
     )
 
 with col_input2:
-    st.markdown("### 🎯 Categorie Custom")
+    st.markdown("### 🎯 Categorie Intent-Based")
 
+    # Info box about categories
     if clustering_mode == "Custom (tu definisci categorie)":
-        st.markdown("**OBBLIGATORIO** - Definisci categoria + descrizione:")
+        st.markdown("""
+        <div class='info-box'>
+        💡 Modifica le 4 categorie default o aggiungine di nuove.<br>
+        La <strong>descrizione</strong> è fondamentale per la classificazione.
+        </div>
+        """, unsafe_allow_html=True)
     else:
-        st.markdown("**OPZIONALE** - Suggerisci categorie + descrizione:")
+        st.markdown("""
+        <div class='info-box'>
+        💡 L'AI genera categorie autonomamente.<br>
+        Puoi comunque suggerire categorie preferite.
+        </div>
+        """, unsafe_allow_html=True)
 
-    # Initialize session state for categories
+    # Initialize session state for categories with new defaults
     if 'custom_categories_list' not in st.session_state:
         st.session_state['custom_categories_list'] = [
             {"name": "Generic", "description": "Broad searches with no specific intent signals (e.g., 'armani lipstick', 'nike shoes')"},
             {"name": "Buy / Compare", "description": "Shopping/comparison intent with words like 'best', 'top', 'vs', 'review' (e.g., 'best laptop 2024')"},
-            {"name": "Feature or Finish", "description": "Specific attributes, specs, colors, finishes (e.g., 'waterproof mascara', 'matte red lipstick')"}
+            {"name": "LOCAL", "description": "Location-based searches with words like 'near me', 'shop', 'store', 'where to buy' (e.g., 'shop near me', 'kiko store milano')"},
+            {"name": "HOW TO", "description": "Tutorial/educational intent with 'how to', 'tutorial', 'guide', 'tips' (e.g., 'how to apply mascara', 'makeup tutorial')"}
         ]
 
-    # Display existing categories with inline editing
+    # Display existing categories with inline editing (more compact)
     for idx, cat in enumerate(st.session_state['custom_categories_list']):
-        col_name, col_desc, col_delete = st.columns([2, 5, 0.5])
-        
-        with col_name:
-            cat_name = st.text_input(
-                "Categoria",
-                value=cat['name'],
-                key=f"cat_name_{idx}",
-                label_visibility="collapsed",
-                placeholder="Nome categoria..."
-            )
-            st.session_state['custom_categories_list'][idx]['name'] = cat_name
-        
-        with col_desc:
-            cat_desc = st.text_input(
-                "Descrizione",
+        with st.container():
+            col_name, col_delete = st.columns([6, 1])
+            
+            with col_name:
+                cat_name = st.text_input(
+                    f"Categoria {idx+1}",
+                    value=cat['name'],
+                    key=f"cat_name_{idx}",
+                    placeholder="Nome categoria...",
+                    label_visibility="collapsed"
+                )
+                st.session_state['custom_categories_list'][idx]['name'] = cat_name
+            
+            with col_delete:
+                if st.button("🗑️", key=f"delete_{idx}", help="Elimina", use_container_width=True):
+                    st.session_state['custom_categories_list'].pop(idx)
+                    st.rerun()
+            
+            cat_desc = st.text_area(
+                f"Descrizione {idx+1}",
                 value=cat['description'],
                 key=f"cat_desc_{idx}",
-                label_visibility="collapsed",
-                placeholder="Descrizione dettagliata dell'intento di ricerca..."
+                placeholder="Descrizione dettagliata dell'intento...",
+                height=60,
+                label_visibility="collapsed"
             )
             st.session_state['custom_categories_list'][idx]['description'] = cat_desc
-        
-        with col_delete:
-            if st.button("🗑️", key=f"delete_{idx}", help="Elimina categoria", use_container_width=True):
-                st.session_state['custom_categories_list'].pop(idx)
-                st.rerun()
-        
-        # Spacer
-        st.markdown("<div style='margin-bottom: 0.5rem;'></div>", unsafe_allow_html=True)
+            
+            st.markdown("<div style='margin-bottom: 0.8rem;'></div>", unsafe_allow_html=True)
 
-    # Action buttons
-    col_add, col_clear = st.columns([1, 1])
+    # Action buttons (more compact)
+    col_add, col_reset = st.columns([1, 1])
     
     with col_add:
-        if st.button("➕ Aggiungi Categoria", use_container_width=True):
+        if st.button("➕ Aggiungi", use_container_width=True):
             st.session_state['custom_categories_list'].append({
                 "name": "",
                 "description": ""
             })
             st.rerun()
     
-    with col_clear:
-        if st.button("🔄 Reset Default", use_container_width=True):
+    with col_reset:
+        if st.button("🔄 Reset", use_container_width=True):
             st.session_state['custom_categories_list'] = [
                 {"name": "Generic", "description": "Broad searches with no specific intent signals (e.g., 'armani lipstick', 'nike shoes')"},
                 {"name": "Buy / Compare", "description": "Shopping/comparison intent with words like 'best', 'top', 'vs', 'review' (e.g., 'best laptop 2024')"},
-                {"name": "Feature or Finish", "description": "Specific attributes, specs, colors, finishes (e.g., 'waterproof mascara', 'matte red lipstick')"}
+                {"name": "LOCAL", "description": "Location-based searches with words like 'near me', 'shop', 'store', 'where to buy' (e.g., 'shop near me', 'kiko store milano')"},
+                {"name": "HOW TO", "description": "Tutorial/educational intent with 'how to', 'tutorial', 'guide', 'tips' (e.g., 'how to apply mascara', 'makeup tutorial')"}
             ]
             st.rerun()
 
     # Count valid categories
     valid_cats = [c for c in st.session_state['custom_categories_list'] if c['name'].strip()]
     if valid_cats:
-        st.success(f"✅ {len(valid_cats)} categorie definite con descrizione")
+        st.success(f"✅ {len(valid_cats)} categorie definite")
 
-# ===============================
-# Info box
-# ===============================
-st.markdown("""
-<div class='info-box'>
-💡 <strong>Intent-Based Clustering:</strong> Keywords categorizzate per MOTIVO della ricerca, non per tipo di prodotto.
-Brand rilevati automaticamente in colonna separata. Output sempre in inglese. Tutte le lingue supportate in input.
-</div>
-""", unsafe_allow_html=True)
-
+# Validation warning
 if clustering_mode == "Custom (tu definisci categorie)" and len(valid_cats) < 3:
     st.markdown("""
     <div class='warning-box'>
-    ⚠️ <strong>Modalità Custom attiva:</strong> Devi definire almeno 3 categorie con nome e descrizione.
+    ⚠️ <strong>Modalità Custom:</strong> Definisci almeno 3 categorie con nome e descrizione.
     </div>
     """, unsafe_allow_html=True)
 
+# Main action button
 analyze_btn = st.button("🚀 Analizza Keywords", use_container_width=True)
 
 # ===============================
@@ -263,7 +279,7 @@ def normalize_clusters(batch_result):
 # ===============================
 # Funzione clustering (Claude)
 # ===============================
-def cluster_keywords_claude(keywords_list, api_key, min_size, max_clusters, batch_size, custom_cats, mode):
+def cluster_keywords_claude(keywords_list, api_key, batch_size, custom_cats, mode, products_list=None, macro_theme=None):
     try:
         client = Anthropic(api_key=api_key)
         all_clusters = []
@@ -271,6 +287,26 @@ def cluster_keywords_claude(keywords_list, api_key, min_size, max_clusters, batc
 
         if len(keywords_list) > batch_size:
             st.info(f"📦 Elaborazione in {total_batches} batch da ~{batch_size} keywords...")
+
+        # Prepare context sections
+        context_section = ""
+        
+        if products_list:
+            products_text = "\n".join(f"- {p}" for p in products_list)
+            context_section += f"""
+PRODUCT CONTEXT:
+These are the products we're analyzing keywords for:
+{products_text}
+
+IMPORTANT: When you see these product names in keywords, treat them as PRODUCTS (not accessories or other categories).
+Example: If "correttore" is in the product list, keywords like "correttore kiko" should be categorized based on INTENT, not treated as a different product type.
+"""
+
+        if macro_theme:
+            context_section += f"""
+MACRO THEME(S): {macro_theme}
+Use this theme to better understand the overall context of the keyword research.
+"""
 
         for batch_idx in range(total_batches):
             start_idx = batch_idx * batch_size
@@ -289,9 +325,9 @@ def cluster_keywords_claude(keywords_list, api_key, min_size, max_clusters, batc
                 )
                 
                 if mode == "Custom (tu definisci categorie)":
-                    extra_instruction = f"Use ONLY these {len(custom_cats)} categories with their descriptions as guidance."
+                    extra_instruction = f"Use ONLY these {len(custom_cats)} categories with their descriptions as your PRIMARY guide."
                 else:
-                    extra_instruction = f"Prefer these {len(custom_cats)} categories. Create max {max_clusters} additional ONLY if absolutely needed."
+                    extra_instruction = f"Prefer these {len(custom_cats)} categories. Create additional ones ONLY if absolutely necessary."
 
                 prompt = f"""You are an expert SEO keyword intent analyzer.
 
@@ -299,6 +335,8 @@ CRITICAL INSTRUCTIONS:
 - ALWAYS respond in ENGLISH (category names, descriptions in English)
 - Keywords can be in ANY language - you must understand them all
 - Output JSON with English category names and descriptions
+
+{context_section}
 
 TASK: Categorize keywords by USER SEARCH INTENT (why they're searching), NOT by product type.
 
@@ -312,14 +350,13 @@ IMPORTANT: Use the category DESCRIPTIONS as your PRIMARY guide for assignment.
 Each description tells you EXACTLY what kind of keywords belong in that category.
 
 BRAND DETECTION:
-- If keyword contains a recognizable brand name (Armani, Dior, MAC, Nike, Apple, Samsung, etc.), extract it
+- If keyword contains a recognizable brand name (Armani, Dior, MAC, Nike, Apple, Samsung, KIKO, etc.), extract it
 - Put brand name in "brand" field (capitalize properly)
 - Do NOT create "Brand Specific" categories
 
 RULES:
 - {extra_instruction}
 - EVERY keyword must be categorized (all {len(batch_keywords)})
-- Min {min_size} keywords/category (flexible)
 - Think: "WHY is the user searching this?" and match to category description
 - Keep your "description" field SHORT (max 10 words, in English)
 - Category names and descriptions MUST be in English
@@ -348,6 +385,8 @@ CRITICAL INSTRUCTIONS:
 - Keywords can be in ANY language - you must understand them all
 - Output JSON with English category names and descriptions
 
+{context_section}
+
 TASK: Categorize keywords by USER SEARCH INTENT (why they're searching), NOT by product type.
 
 KEYWORDS ({len(batch_keywords)} - may be in any language):
@@ -362,30 +401,31 @@ INTENT CATEGORIZATION LOGIC (create categories with English names):
    Examples: "best base makeup for oily skin", "top 10 laptops", "migliori smartphone"
    Words: best, top, vs, comparison, review, migliori, mejores, etc.
 
-3. **Feature or Finish**: SPECIFIC attributes/characteristics
+3. **LOCAL**: Location-based searches
+   Examples: "shop near me", "kiko store milano", "where to buy mascara", "vicino a me"
+   Words: near me, shop, store, where to buy, negozio, tienda, vicino, etc.
+
+4. **HOW TO**: Tutorial/educational intent
+   Examples: "how to apply mascara", "makeup tutorial", "come applicare il trucco"
+   Words: how to, tutorial, guide, tips, come fare, tutorial, guida, etc.
+
+5. **Feature or Finish**: SPECIFIC attributes/characteristics
    Examples: "waterproof mascara", "matte red lipstick", "mascara impermeabile"
 
-4. **Price Related**: Budget-focused
+6. **Price Related**: Budget-focused
    Examples: "cheap mascara", "luxury skincare", "economico", "barato"
 
-5. **Problem / Solution**: Addresses specific problem
+7. **Problem / Solution**: Addresses specific problem
    Examples: "mascara that doesn't smudge", "laptop for gaming"
-
-6. **Tutorial / How To**: Educational
-   Examples: "how to apply mascara", "makeup tutorial", "come applicare"
-
-7. **Application Area**: Specific use case/location
-   Examples: "mascara for sensitive eyes", "running shoes for flat feet"
 
 BRAND DETECTION:
 - Extract recognizable brand names to "brand" field
-- Capitalize properly (Armani, Nike, Samsung, etc.)
+- Capitalize properly (Armani, Nike, Samsung, KIKO, etc.)
 - Do NOT create "Brand Specific" categories
 
-CREATE: 5-{max_clusters} intent categories with English names
+CREATE: 5-15 intent categories with English names
 RULES:
 - EVERY keyword must be categorized (all {len(batch_keywords)})
-- Min {min_size} keywords/category (flexible)
 - Think: "WHY is the user searching this?"
 - Focus on INTENT, not product type
 - Keep "description" field SHORT (max 10 words, in English)
@@ -512,7 +552,8 @@ JSON FORMAT:
             "total_clusters": len(all_clusters),
             "generic_count": sum(len(c.get('keywords', [])) for c in all_clusters if cname(c) == 'generic'),
             "buy_compare_count": sum(len(c.get('keywords', [])) for c in all_clusters if 'buy' in cname(c) or 'compare' in cname(c)),
-            "feature_count": sum(len(c.get('keywords', [])) for c in all_clusters if 'feature' in cname(c)),
+            "local_count": sum(len(c.get('keywords', [])) for c in all_clusters if 'local' in cname(c)),
+            "howto_count": sum(len(c.get('keywords', [])) for c in all_clusters if 'how to' in cname(c)),
             "branded_count": sum(
                 1
                 for c in all_clusters
@@ -538,6 +579,8 @@ if analyze_btn:
         st.error("⚠️ Modalità Custom: inserisci almeno 3 categorie con nome e descrizione")
     else:
         keywords_list = [kw.strip() for kw in keywords_input.strip().split('\n') if kw.strip()]
+        products_list = [p.strip() for p in products_input.strip().split('\n') if p.strip()] if products_input.strip() else None
+        macro_theme = macro_theme_input.strip() if macro_theme_input.strip() else None
 
         if len(keywords_list) < 3:
             st.warning("⚠️ Minimo 3 keywords richieste")
@@ -549,11 +592,11 @@ if analyze_btn:
                 result, error = cluster_keywords_claude(
                     keywords_list,
                     api_key,
-                    min_cluster_size,
-                    max_clusters,
                     batch_size_option,
                     valid_cats,
-                    clustering_mode
+                    clustering_mode,
+                    products_list,
+                    macro_theme
                 )
 
                 progress.progress(100)
@@ -565,13 +608,22 @@ if analyze_btn:
             else:
                 st.session_state['clustering_results'] = result
 
+                summary_items = [
+                    f"• {result['summary']['total_keywords_input']} keywords inviate",
+                    f"• {result['summary']['total_keywords']} keywords categorizzate",
+                    f"• {result['summary']['total_clusters']} categorie create",
+                    f"• {result['summary']['branded_count']} keywords con brand"
+                ]
+                
+                if products_list:
+                    summary_items.append(f"• {len(products_list)} prodotti nel contesto")
+                if macro_theme:
+                    summary_items.append(f"• Macrotema: {macro_theme}")
+                
                 st.markdown(f"""
                 <div class='success-box'>
                 ✅ <strong>Analisi completata!</strong><br>
-                • {result['summary']['total_keywords_input']} keywords inviate<br>
-                • {result['summary']['total_keywords']} keywords categorizzate<br>
-                • {result['summary']['total_clusters']} categorie create<br>
-                • {result['summary']['branded_count']} keywords con brand
+                {"<br>".join(summary_items)}
                 </div>
                 """, unsafe_allow_html=True)
 
@@ -619,7 +671,11 @@ if 'clustering_results' in st.session_state:
             'Total Keywords Input': result['summary'].get('total_keywords_input', 0),
             'Total Keywords Categorized': result['summary'].get('total_keywords', 0),
             'Total Categories': result['summary'].get('total_clusters', 0),
-            'Keywords with Brand': result['summary'].get('branded_count', 0)
+            'Keywords with Brand': result['summary'].get('branded_count', 0),
+            'Generic Count': result['summary'].get('generic_count', 0),
+            'Buy/Compare Count': result['summary'].get('buy_compare_count', 0),
+            'LOCAL Count': result['summary'].get('local_count', 0),
+            'HOW TO Count': result['summary'].get('howto_count', 0)
         }])
         summary_df.to_excel(writer, sheet_name='Summary', index=False)
 
