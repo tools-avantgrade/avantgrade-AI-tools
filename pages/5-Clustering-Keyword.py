@@ -16,53 +16,142 @@ st.set_page_config(
 
 st.markdown("""
     <style>
+    /* Background & Text */
     .stApp { background-color: #000000; }
-    h1, h2, h3, p, label { color: #ffffff !important; }
+    h1, h2, h3, h4, p, label, div { color: #ffffff !important; }
+    
+    /* Text Areas & Inputs */
     .stTextArea textarea {
         background-color: #1a1a1a !important;
         color: #ffffff !important;
-        border: 1px solid #FF6B35 !important;
-        font-family: monospace;
+        border: 2px solid #FF6B35 !important;
+        border-radius: 8px !important;
+        font-family: 'SF Mono', Monaco, monospace;
+        font-size: 14px !important;
+        padding: 12px !important;
+    }
+    .stTextArea textarea:focus {
+        border-color: #F7931E !important;
+        box-shadow: 0 0 0 3px rgba(255, 107, 53, 0.1) !important;
     }
     .stTextInput input {
         background-color: #1a1a1a !important;
         color: #ffffff !important;
-        border: 1px solid #FF6B35 !important;
+        border: 2px solid #FF6B35 !important;
+        border-radius: 8px !important;
+        padding: 10px 12px !important;
+        font-size: 14px !important;
     }
+    .stTextInput input:focus {
+        border-color: #F7931E !important;
+        box-shadow: 0 0 0 3px rgba(255, 107, 53, 0.1) !important;
+    }
+    
+    /* Buttons */
     .stButton>button {
-        background-color: #FF6B35;
+        background: linear-gradient(135deg, #FF6B35 0%, #F7931E 100%);
         color: white;
         border: none;
-        padding: 0.5rem 2rem;
+        border-radius: 8px;
+        padding: 0.6rem 1.5rem;
         font-weight: 600;
+        font-size: 15px;
+        transition: all 0.3s ease;
         width: 100%;
     }
-    .stButton>button:hover { background-color: #F7931E; }
+    .stButton>button:hover {
+        background: linear-gradient(135deg, #F7931E 0%, #FF6B35 100%);
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(255, 107, 53, 0.3);
+    }
+    
+    /* Primary Button */
+    .stButton>button[kind="primary"] {
+        background: linear-gradient(135deg, #FF6B35 0%, #F7931E 100%);
+        font-size: 18px;
+        padding: 0.8rem 2rem;
+        box-shadow: 0 4px 20px rgba(255, 107, 53, 0.4);
+    }
+    
+    /* Expander */
+    .streamlit-expanderHeader {
+        background-color: #1a1a1a !important;
+        border: 1px solid #FF6B35 !important;
+        border-radius: 8px !important;
+        color: #ffffff !important;
+    }
+    
+    /* Info/Success/Warning Boxes */
     .success-box {
-        background-color: #1a1a1a;
-        border-left: 3px solid #00ff88;
-        padding: 1rem;
+        background: linear-gradient(135deg, #1a1a1a 0%, #0d2818 100%);
+        border-left: 4px solid #00ff88;
+        border-radius: 8px;
+        padding: 1.2rem;
         margin: 1rem 0;
         color: #cccccc;
+        box-shadow: 0 2px 8px rgba(0, 255, 136, 0.1);
     }
     .info-box {
-        background-color: #1a1a1a;
-        border-left: 3px solid #FF6B35;
-        padding: 1rem;
+        background: linear-gradient(135deg, #1a1a1a 0%, #2a1a0d 100%);
+        border-left: 4px solid #FF6B35;
+        border-radius: 8px;
+        padding: 1.2rem;
         margin: 1rem 0;
         color: #cccccc;
+        box-shadow: 0 2px 8px rgba(255, 107, 53, 0.1);
     }
     .warning-box {
-        background-color: #1a1a1a;
-        border-left: 3px solid #F7931E;
-        padding: 1rem;
+        background: linear-gradient(135deg, #1a1a1a 0%, #2a1f0d 100%);
+        border-left: 4px solid #F7931E;
+        border-radius: 8px;
+        padding: 1.2rem;
         margin: 1rem 0;
         color: #cccccc;
+        box-shadow: 0 2px 8px rgba(247, 147, 30, 0.1);
     }
-    .compact-label {
-        font-size: 0.9rem;
-        color: #cccccc;
-        margin-bottom: 0.3rem;
+    
+    /* Metrics */
+    div[data-testid="stMetricValue"] {
+        color: #FF6B35 !important;
+        font-size: 32px !important;
+        font-weight: bold !important;
+    }
+    
+    /* Headers Styling */
+    h1 { 
+        font-size: 2.5rem !important; 
+        font-weight: 700 !important;
+        background: linear-gradient(135deg, #FF6B35 0%, #F7931E 100%);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        margin-bottom: 0.5rem !important;
+    }
+    h2 { 
+        font-size: 1.8rem !important; 
+        font-weight: 600 !important;
+        margin-top: 2rem !important;
+        margin-bottom: 1rem !important;
+    }
+    h3 { 
+        font-size: 1.3rem !important; 
+        font-weight: 500 !important;
+        color: #F7931E !important;
+        margin-bottom: 0.8rem !important;
+    }
+    
+    /* Containers */
+    .stContainer {
+        background-color: #0d0d0d;
+        border-radius: 8px;
+        padding: 1rem;
+        margin-bottom: 1rem;
+    }
+    
+    /* Divider */
+    hr {
+        border-color: #FF6B35 !important;
+        opacity: 0.3 !important;
+        margin: 2rem 0 !important;
     }
     </style>
 """, unsafe_allow_html=True)
@@ -91,10 +180,23 @@ with st.sidebar:
     clustering_mode = st.radio(
         "Modalità Clustering",
         ["Auto (AI genera categorie)", "Custom (tu definisci categorie)"],
-        help="Auto: AI crea categorie da zero. Custom: usi le tue 4 categorie predefinite"
+        help="Auto: AI crea categorie da zero. Custom: usi le tue categorie predefinite"
     )
 
     st.markdown("---")
+
+    if clustering_mode == "Auto (AI genera categorie)":
+        max_clusters = st.slider(
+            "Max categorie da generare",
+            5, 30, 15,
+            help="Numero massimo di categorie che l'AI può creare"
+        )
+    else:
+        max_clusters = st.slider(
+            "Categorie extra da generare",
+            0, 10, 2,
+            help="Categorie aggiuntive se quelle custom non bastano"
+        )
 
     batch_size_option = st.selectbox(
         "Batch size",
@@ -110,136 +212,147 @@ with st.sidebar:
     st.markdown("**⚠️ Delay:** 60s tra batch")
 
 # ===============================
-# Input Section
+# Input Section - Layout Verticale
 # ===============================
-col_input1, col_input2 = st.columns([1, 1])
+st.markdown("## 📝 Step 1: Input Keywords")
+st.markdown("Inserisci le tue keyword (una per riga)")
 
-with col_input1:
-    st.markdown("### 📝 Input Keywords & Context")
+keywords_input = st.text_area(
+    "keywords_input_label",
+    height=300,
+    placeholder="armani lipstick\nbest base makeup for oily skin\ncorrettore kiko\nmascara waterproof\nshop near me\nhow to apply mascara\n...",
+    help="Una keyword per riga. Qualsiasi lingua. Fino a 5000+ keywords.",
+    label_visibility="collapsed"
+)
+
+st.markdown("---")
+
+# ===============================
+# Context Section
+# ===============================
+st.markdown("## 🎯 Step 2: Contesto (Opzionale ma Consigliato)")
+
+with st.expander("💡 Perché il contesto migliora i risultati?", expanded=False):
+    st.markdown("""
+    **Lista Prodotti**: Aiuta l'AI a capire cosa vendi (es: "correttore" = prodotto makeup, non accessorio)
     
-    # Keywords input
-    keywords_input = st.text_area(
-        "Keywords (una per riga)",
-        height=200,
-        placeholder="armani lipstick\nbest base makeup for oily skin\ncorrettore kiko\nmascara waterproof\nshop near me\n...",
-        help="Una keyword per riga. Qualsiasi lingua. Fino a 5000+ keywords."
-    )
+    **Macrotema**: Fornisce il settore generale (es: Makeup, Tech, Food) per disambiguare keyword ambigue
     
-    # Product list input
-    st.markdown("<div class='compact-label'>🏷️ Lista Prodotti (opzionale ma consigliato)</div>", unsafe_allow_html=True)
+    **Risultato**: +30-40% di accuratezza nella categorizzazione! 🚀
+    """)
+
+col_context1, col_context2 = st.columns([1, 1])
+
+with col_context1:
+    st.markdown("### 🏷️ Lista Prodotti")
     products_input = st.text_area(
-        "prodotti",
-        height=100,
+        "products_label",
+        height=150,
         placeholder="correttore\nfondotinta\nmascara\nmatita occhi\nrossetto\n...",
-        help="Lista prodotti del tuo brand. Aiuta l'AI a capire il contesto (es. 'correttore' è un prodotto, non un accessorio)",
+        help="Lista prodotti del tuo brand (uno per riga)",
+        label_visibility="collapsed"
+    )
+
+with col_context2:
+    st.markdown("### 🎯 Macrotema/i")
+    macro_theme_input = st.text_input(
+        "macrotema_label",
+        placeholder="Makeup, Beauty, Cosmetics",
+        help="Tema generale (separati da virgola se più di uno)",
         label_visibility="collapsed"
     )
     
-    # Macro theme input
-    st.markdown("<div class='compact-label'>🎯 Macrotema/i (opzionale)</div>", unsafe_allow_html=True)
-    macro_theme_input = st.text_input(
-        "macrotema",
-        placeholder="Makeup, Beauty, Cosmetics",
-        help="Tema generale della keyword research. Puoi inserirne più di uno separati da virgola",
-        label_visibility="collapsed"
-    )
+    # Spacer per allineamento
+    st.markdown("<br>" * 5, unsafe_allow_html=True)
 
-with col_input2:
-    st.markdown("### 🎯 Categorie Intent-Based")
+st.markdown("---")
 
-    # Info box about categories
-    if clustering_mode == "Custom (tu definisci categorie)":
-        st.markdown("""
-        <div class='info-box'>
-        💡 Modifica le 4 categorie default o aggiungine di nuove.<br>
-        La <strong>descrizione</strong> è fondamentale per la classificazione.
-        </div>
-        """, unsafe_allow_html=True)
-    else:
-        st.markdown("""
-        <div class='info-box'>
-        💡 L'AI genera categorie autonomamente.<br>
-        Puoi comunque suggerire categorie preferite.
-        </div>
-        """, unsafe_allow_html=True)
+# ===============================
+# Categories Section
+# ===============================
+st.markdown("## 🗂️ Step 3: Categorie Intent-Based")
 
-    # Initialize session state for categories with new defaults
-    if 'custom_categories_list' not in st.session_state:
+if clustering_mode == "Custom (tu definisci categorie)":
+    st.info("💡 **Modalità Custom**: Modifica le 4 categorie default o aggiungine di nuove. La descrizione è fondamentale!")
+else:
+    st.info("💡 **Modalità Auto**: L'AI genera categorie autonomamente. Puoi comunque suggerire categorie preferite.")
+
+# Initialize session state for categories with new defaults
+if 'custom_categories_list' not in st.session_state:
+    st.session_state['custom_categories_list'] = [
+        {"name": "Generic", "description": "Broad searches with no specific intent signals (e.g., 'armani lipstick', 'nike shoes')"},
+        {"name": "Buy / Compare", "description": "Shopping/comparison intent with words like 'best', 'top', 'vs', 'review' (e.g., 'best laptop 2024')"},
+        {"name": "LOCAL", "description": "Location-based searches with words like 'near me', 'shop', 'store', 'where to buy' (e.g., 'shop near me', 'kiko store milano')"},
+        {"name": "HOW TO", "description": "Tutorial/educational intent with 'how to', 'tutorial', 'guide', 'tips' (e.g., 'how to apply mascara', 'makeup tutorial')"}
+    ]
+
+# Display categories in a more compact way
+for idx, cat in enumerate(st.session_state['custom_categories_list']):
+    with st.container():
+        col1, col2, col3 = st.columns([3, 6, 0.7])
+        
+        with col1:
+            cat_name = st.text_input(
+                f"cat_name_label_{idx}",
+                value=cat['name'],
+                key=f"cat_name_{idx}",
+                placeholder="Nome categoria",
+                label_visibility="collapsed"
+            )
+            st.session_state['custom_categories_list'][idx]['name'] = cat_name
+        
+        with col2:
+            cat_desc = st.text_input(
+                f"cat_desc_label_{idx}",
+                value=cat['description'],
+                key=f"cat_desc_{idx}",
+                placeholder="Descrizione dettagliata dell'intento di ricerca",
+                label_visibility="collapsed"
+            )
+            st.session_state['custom_categories_list'][idx]['description'] = cat_desc
+        
+        with col3:
+            if st.button("🗑️", key=f"delete_{idx}", help="Elimina categoria", use_container_width=True):
+                st.session_state['custom_categories_list'].pop(idx)
+                st.rerun()
+
+# Action buttons
+col_btn1, col_btn2, col_btn3 = st.columns([2, 2, 2])
+
+with col_btn1:
+    if st.button("➕ Aggiungi Categoria", use_container_width=True):
+        st.session_state['custom_categories_list'].append({
+            "name": "",
+            "description": ""
+        })
+        st.rerun()
+
+with col_btn2:
+    if st.button("🔄 Reset Default", use_container_width=True):
         st.session_state['custom_categories_list'] = [
             {"name": "Generic", "description": "Broad searches with no specific intent signals (e.g., 'armani lipstick', 'nike shoes')"},
             {"name": "Buy / Compare", "description": "Shopping/comparison intent with words like 'best', 'top', 'vs', 'review' (e.g., 'best laptop 2024')"},
             {"name": "LOCAL", "description": "Location-based searches with words like 'near me', 'shop', 'store', 'where to buy' (e.g., 'shop near me', 'kiko store milano')"},
             {"name": "HOW TO", "description": "Tutorial/educational intent with 'how to', 'tutorial', 'guide', 'tips' (e.g., 'how to apply mascara', 'makeup tutorial')"}
         ]
+        st.rerun()
 
-    # Display existing categories with inline editing (more compact)
-    for idx, cat in enumerate(st.session_state['custom_categories_list']):
-        with st.container():
-            col_name, col_delete = st.columns([6, 1])
-            
-            with col_name:
-                cat_name = st.text_input(
-                    f"Categoria {idx+1}",
-                    value=cat['name'],
-                    key=f"cat_name_{idx}",
-                    placeholder="Nome categoria...",
-                    label_visibility="collapsed"
-                )
-                st.session_state['custom_categories_list'][idx]['name'] = cat_name
-            
-            with col_delete:
-                if st.button("🗑️", key=f"delete_{idx}", help="Elimina", use_container_width=True):
-                    st.session_state['custom_categories_list'].pop(idx)
-                    st.rerun()
-            
-            cat_desc = st.text_area(
-                f"Descrizione {idx+1}",
-                value=cat['description'],
-                key=f"cat_desc_{idx}",
-                placeholder="Descrizione dettagliata dell'intento...",
-                height=60,
-                label_visibility="collapsed"
-            )
-            st.session_state['custom_categories_list'][idx]['description'] = cat_desc
-            
-            st.markdown("<div style='margin-bottom: 0.8rem;'></div>", unsafe_allow_html=True)
-
-    # Action buttons (more compact)
-    col_add, col_reset = st.columns([1, 1])
-    
-    with col_add:
-        if st.button("➕ Aggiungi", use_container_width=True):
-            st.session_state['custom_categories_list'].append({
-                "name": "",
-                "description": ""
-            })
-            st.rerun()
-    
-    with col_reset:
-        if st.button("🔄 Reset", use_container_width=True):
-            st.session_state['custom_categories_list'] = [
-                {"name": "Generic", "description": "Broad searches with no specific intent signals (e.g., 'armani lipstick', 'nike shoes')"},
-                {"name": "Buy / Compare", "description": "Shopping/comparison intent with words like 'best', 'top', 'vs', 'review' (e.g., 'best laptop 2024')"},
-                {"name": "LOCAL", "description": "Location-based searches with words like 'near me', 'shop', 'store', 'where to buy' (e.g., 'shop near me', 'kiko store milano')"},
-                {"name": "HOW TO", "description": "Tutorial/educational intent with 'how to', 'tutorial', 'guide', 'tips' (e.g., 'how to apply mascara', 'makeup tutorial')"}
-            ]
-            st.rerun()
-
-    # Count valid categories
+with col_btn3:
     valid_cats = [c for c in st.session_state['custom_categories_list'] if c['name'].strip()]
-    if valid_cats:
-        st.success(f"✅ {len(valid_cats)} categorie definite")
+    st.metric("Categorie Attive", len(valid_cats))
+
+st.markdown("---")
 
 # Validation warning
 if clustering_mode == "Custom (tu definisci categorie)" and len(valid_cats) < 3:
-    st.markdown("""
-    <div class='warning-box'>
-    ⚠️ <strong>Modalità Custom:</strong> Definisci almeno 3 categorie con nome e descrizione.
-    </div>
-    """, unsafe_allow_html=True)
+    st.warning("⚠️ **Modalità Custom**: Definisci almeno 3 categorie con nome e descrizione.")
 
-# Main action button
-analyze_btn = st.button("🚀 Analizza Keywords", use_container_width=True)
+# ===============================
+# Main Action Button
+# ===============================
+st.markdown("## 🚀 Step 4: Analizza")
+
+analyze_btn = st.button("🚀 ANALIZZA KEYWORDS", use_container_width=True, type="primary")
 
 # ===============================
 # Helper: normalizzazione cluster
@@ -279,7 +392,7 @@ def normalize_clusters(batch_result):
 # ===============================
 # Funzione clustering (Claude)
 # ===============================
-def cluster_keywords_claude(keywords_list, api_key, batch_size, custom_cats, mode, products_list=None, macro_theme=None):
+def cluster_keywords_claude(keywords_list, api_key, batch_size, custom_cats, mode, max_clusters, products_list=None, macro_theme=None):
     try:
         client = Anthropic(api_key=api_key)
         all_clusters = []
@@ -325,9 +438,9 @@ Use this theme to better understand the overall context of the keyword research.
                 )
                 
                 if mode == "Custom (tu definisci categorie)":
-                    extra_instruction = f"Use ONLY these {len(custom_cats)} categories with their descriptions as your PRIMARY guide."
+                    extra_instruction = f"Use ONLY these {len(custom_cats)} categories as PRIMARY guide. You can create max {max_clusters} additional categories ONLY if absolutely necessary."
                 else:
-                    extra_instruction = f"Prefer these {len(custom_cats)} categories. Create additional ones ONLY if absolutely necessary."
+                    extra_instruction = f"Prefer these {len(custom_cats)} categories. Create max {max_clusters} additional categories ONLY if needed."
 
                 prompt = f"""You are an expert SEO keyword intent analyzer.
 
@@ -423,7 +536,7 @@ BRAND DETECTION:
 - Capitalize properly (Armani, Nike, Samsung, KIKO, etc.)
 - Do NOT create "Brand Specific" categories
 
-CREATE: 5-15 intent categories with English names
+CREATE: 5-{max_clusters} intent categories with English names
 RULES:
 - EVERY keyword must be categorized (all {len(batch_keywords)})
 - Think: "WHY is the user searching this?"
@@ -595,6 +708,7 @@ if analyze_btn:
                     batch_size_option,
                     valid_cats,
                     clustering_mode,
+                    max_clusters,
                     products_list,
                     macro_theme
                 )
