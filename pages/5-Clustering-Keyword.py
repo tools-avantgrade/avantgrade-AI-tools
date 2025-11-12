@@ -166,8 +166,12 @@ st.markdown("---")
 # ===============================
 # Sidebar (Minimal)
 # ===============================
-    with st.sidebar:
+# ===============================
+# Sidebar (Minimal)
+# ===============================
+with st.sidebar:
     st.markdown("### ⚙️ Configurazione")
+    
     st.markdown("""
         <div style='background: linear-gradient(135deg, #2a1a0d 0%, #1a1a1a 100%); 
                     border: 1px solid #F7931E; 
