@@ -160,14 +160,24 @@ st.markdown("""
 # Header
 # ===============================
 st.title("🧩 Keyword Clustering Expert")
-st.markdown("**AI-powered intent-based clustering con Claude Sonnet 4.5**")
+st.markdown("**AI-powered intent-based clustering con Claude Sonnet 4.5** <span style='background: linear-gradient(135deg, #FF6B35 0%, #F7931E 100%); padding: 4px 12px; border-radius: 20px; font-size: 12px; font-weight: 700; margin-left: 10px; letter-spacing: 1px;'>BETA</span>", unsafe_allow_html=True)
 st.markdown("---")
 
 # ===============================
 # Sidebar (Minimal)
 # ===============================
-with st.sidebar:
+    with st.sidebar:
     st.markdown("### ⚙️ Configurazione")
+    st.markdown("""
+        <div style='background: linear-gradient(135deg, #2a1a0d 0%, #1a1a1a 100%); 
+                    border: 1px solid #F7931E; 
+                    border-radius: 8px; 
+                    padding: 8px; 
+                    text-align: center; 
+                    margin-bottom: 1rem;'>
+            <span style='color: #F7931E; font-weight: 700; font-size: 13px; letter-spacing: 1px;'>⚠️ BETA VERSION</span>
+        </div>
+    """, unsafe_allow_html=True)
 
     api_key = st.text_input(
         "Anthropic API Key",
