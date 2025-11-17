@@ -110,6 +110,27 @@ st.markdown("""
         box-shadow: 0 2px 8px rgba(247, 147, 30, 0.1);
     }
     
+    /* Feedback Box */
+    .feedback-box {
+        background: linear-gradient(135deg, #1a1a1a 0%, #1a1a2a 100%);
+        border: 2px solid #FF6B35;
+        border-radius: 12px;
+        padding: 1.5rem;
+        margin: 1.5rem 0;
+        color: #ffffff;
+        box-shadow: 0 4px 16px rgba(255, 107, 53, 0.2);
+    }
+    .feedback-box a {
+        color: #FF6B35 !important;
+        text-decoration: none;
+        font-weight: 600;
+        transition: color 0.3s ease;
+    }
+    .feedback-box a:hover {
+        color: #F7931E !important;
+        text-decoration: underline;
+    }
+    
     /* Metrics */
     div[data-testid="stMetricValue"] {
         color: #FF6B35 !important;
@@ -161,11 +182,19 @@ st.markdown("""
 # ===============================
 st.title("🧩 Keyword Clustering Expert")
 st.markdown("**AI-powered intent-based clustering con Claude Sonnet 4.5** <span style='background: linear-gradient(135deg, #FF6B35 0%, #F7931E 100%); padding: 4px 12px; border-radius: 20px; font-size: 12px; font-weight: 700; margin-left: 10px; letter-spacing: 1px;'>BETA</span>", unsafe_allow_html=True)
-st.markdown("---")
 
 # ===============================
-# Sidebar (Minimal)
+# Feedback Box
 # ===============================
+st.markdown("""
+<div class='feedback-box'>
+    <strong>🐛 Bug? 💡 Feedback? 🚀 Evolutiva?</strong><br>
+    Segnalalo direttamente su GitHub → <a href='https://github.com/tools-avantgrade/avantgrade-AI-tools/issues' target='_blank'>Apri una Issue</a>
+</div>
+""", unsafe_allow_html=True)
+
+st.markdown("---")
+
 # ===============================
 # Sidebar (Minimal)
 # ===============================
