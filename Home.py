@@ -106,7 +106,7 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 
-# Tools Grid - 4 tool attivi
+# Tools Grid - 6 tool attivi
 col1, col2 = st.columns(2)
 
 with col1:
@@ -127,6 +127,16 @@ with col1:
         <p>Extract HTML tags, metadata, images and complete SEO structure from competitor URLs</p>
     </div>
     """, unsafe_allow_html=True)
+    
+    st.markdown("<br>", unsafe_allow_html=True)
+    
+    # Keyword Clustering
+    st.markdown("""
+    <div class='tool-card'>
+        <h3>🧩 Keyword Clustering Expert</h3>
+        <p>AI-powered semantic keyword clustering with Claude Sonnet 4.5 - supports 5000+ keywords</p>
+    </div>
+    """, unsafe_allow_html=True)
 
 with col2:
     # Query Fan-Out
@@ -139,11 +149,21 @@ with col2:
     
     st.markdown("<br>", unsafe_allow_html=True)
     
-    # Keyword Clustering
+    # Alt Text Generator
     st.markdown("""
     <div class='tool-card'>
-        <h3>🧩 Keyword Clustering Expert</h3>
-        <p>AI-powered semantic keyword clustering with Claude Sonnet 4.5 - supports 5000+ keywords</p>
+        <h3>🖼️ Alt Text Generator</h3>
+        <p>Generate SEO-optimized alt text for images using OpenAI Vision API - batch processing supported</p>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    st.markdown("<br>", unsafe_allow_html=True)
+    
+    # Meta Tag Generator
+    st.markdown("""
+    <div class='tool-card'>
+        <h3>📝 Meta Tag Generator</h3>
+        <p>AI-powered meta title & description generator using Claude - supports 1000+ URLs with smart batching</p>
     </div>
     """, unsafe_allow_html=True)
 
@@ -151,7 +171,7 @@ with col2:
 st.markdown("""
 <div class='footer'>
     <p><strong>AvantGrade.com</strong> • Professional SEO Tools Suite</p>
-    <p>4 Active Tools • Built for Digital Marketing Professionals</p>
+    <p>6 Active Tools • Built for Digital Marketing Professionals</p>
 </div>
 """, unsafe_allow_html=True)
 
@@ -160,7 +180,7 @@ with st.sidebar:
     st.markdown("### 🏠 AvantGrade.com")
     st.markdown("---")
     
-    st.markdown("### ✅ Active Tools (4)")
+    st.markdown("### ✅ Active Tools (6)")
     st.markdown("""
 **Click a tool below to open:**
 
@@ -173,7 +193,8 @@ Use the Streamlit navigation above ☝️
     st.markdown("""
 - **SerpAPI** → SERP Analyzer
 - **Google Gemini** → Query Fan-Out
-- **Anthropic Claude** → Keyword Clustering
+- **Anthropic Claude** → Keyword Clustering, Meta Tag Generator
+- **OpenAI** → Alt Text Generator
     """)
     
     st.markdown("---")
@@ -191,6 +212,6 @@ Use the Streamlit navigation above ☝️
     st.markdown("""
 <div style='text-align: center; color: #666; font-size: 0.85em;'>
 <p><strong>AvantGrade.com</strong></p>
-<p>v2.0 • 4 Tools</p>
+<p>v2.1 • 6 Tools</p>
 </div>
     """, unsafe_allow_html=True)
