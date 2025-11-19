@@ -5,6 +5,7 @@ import time
 from io import BytesIO
 from bs4 import BeautifulSoup
 import json
+from urllib.parse import urlparse
 
 # Configurazione pagina
 st.set_page_config(
@@ -93,10 +94,11 @@ st.markdown("""
 <div class='info-box'>
     <strong>ℹ️ How it works:</strong><br>
     1. Paste page URLs (one per line) in the textarea below<br>
-    2. Optionally add primary keywords (one per line, matching URL order)<br>
-    3. Insert your Anthropic API key<br>
-    4. Click "Generate Meta Tags" - the tool will scrape each page and use Claude to generate optimized meta tags<br>
-    5. Download results in Excel or CSV format
+    2. Insert your brand name for title branding<br>
+    3. Optionally add primary keywords (one per line, matching URL order)<br>
+    4. Insert your Anthropic API key<br>
+    5. Click "Generate Meta Tags" - the tool will scrape each page and use Claude to generate optimized meta tags<br>
+    6. Download results in Excel or CSV format
 </div>
 """, unsafe_allow_html=True)
 
@@ -111,6 +113,13 @@ with st.sidebar:
         type="password",
         help="Your Anthropic API key (required for Claude)",
         placeholder="sk-ant-..."
+    )
+    
+    # Brand name
+    brand_name = st.text_input(
+        "Brand Name",
+        help="Your brand name (will be added as '| Brand' at the end of titles)",
+        placeholder="e.g., AvantGrade"
     )
     
     st.markdown("---")
@@ -146,19 +155,23 @@ with st.sidebar:
     
     st.markdown("---")
     
-    st.markdown("### 📋 Meta Tag Guidelines")
+    st.markdown("### 📋 SEO Guidelines")
     st.markdown("""
 **Title Best Practices:**
-- 55-60 characters optimal
+- **MAX 60 characters** (including brand)
 - Include primary keyword
-- Brand at the end (optional)
+- Format: "Keyword-rich title | Brand"
 - Unique for each page
 
 **Description Best Practices:**
-- 150-160 characters optimal
-- Include primary & secondary keywords
-- Compelling call-to-action
-- Accurate page summary
+- **MAX 150 characters** (strict limit)
+- Include primary keyword naturally
+- Use varied styles:
+  - Descriptive statements
+  - Questions (occasionally)
+  - Benefits-focused
+- **Always ONE clear CTA**
+- Avoid overusing "Scopri"
     """)
     
     st.markdown("---")
@@ -175,7 +188,7 @@ with st.sidebar:
     st.markdown("""
 <div style='text-align: center; color: #666; font-size: 0.85em; margin-top: 2rem;'>
     <p><strong>AvantGrade.com</strong></p>
-    <p>Meta Tag Generator v1.0</p>
+    <p>Meta Tag Generator v1.1</p>
 </div>
     """, unsafe_allow_html=True)
 
@@ -203,6 +216,19 @@ with col2:
     )
 
 # Helper functions
+def extract_domain_name(url):
+    """Extract clean domain name from URL"""
+    try:
+        parsed = urlparse(url)
+        domain = parsed.netloc.replace('www.', '')
+        # Get main domain without TLD
+        parts = domain.split('.')
+        if len(parts) > 1:
+            return parts[0].capitalize()
+        return domain.capitalize()
+    except:
+        return ""
+
 def scrape_page_content(url, timeout=10):
     """Scrape page content for meta tag generation"""
     try:
@@ -226,6 +252,10 @@ def scrape_page_content(url, timeout=10):
         h1_tags = soup.find_all('h1')
         h1_text = ' | '.join([h1.text.strip() for h1 in h1_tags[:3]]) if h1_tags else ""
         
+        # Extract h2 (for additional context)
+        h2_tags = soup.find_all('h2')
+        h2_text = ' | '.join([h2.text.strip() for h2 in h2_tags[:3]]) if h2_tags else ""
+        
         # Extract first paragraph
         paragraphs = soup.find_all('p')
         first_para = ""
@@ -240,6 +270,7 @@ def scrape_page_content(url, timeout=10):
             'existing_title': existing_title,
             'existing_description': existing_description,
             'h1': h1_text,
+            'h2': h2_text,
             'first_paragraph': first_para,
             'error': None
         }
@@ -250,35 +281,80 @@ def scrape_page_content(url, timeout=10):
             'existing_title': '',
             'existing_description': '',
             'h1': '',
+            'h2': '',
             'first_paragraph': '',
             'error': str(e)
         }
 
-def generate_meta_tags_claude(url, page_content, primary_keyword, api_key, retry=3):
-    """Generate meta tags using Claude API"""
+def generate_meta_tags_claude(url, page_content, primary_keyword, brand_name, api_key, retry=3):
+    """Generate meta tags using Claude API with enhanced SEO prompt"""
     
-    # Build prompt
-    prompt = f"""You are an expert SEO specialist. Generate optimized meta title and meta description for the following webpage.
+    # Build enhanced prompt with strict SEO guidelines
+    prompt = f"""You are an expert SEO specialist working for a premium digital marketing agency. Generate highly optimized meta title and meta description for the following webpage.
 
 URL: {url}
-Primary Keyword: {primary_keyword if primary_keyword else 'Not specified - extract from content'}
+Brand Name: {brand_name if brand_name else 'Extract from content'}
+Primary Keyword: {primary_keyword if primary_keyword else 'Extract from content - use the most relevant keyword'}
 
-Page Content:
-- Existing Title: {page_content['existing_title']}
-- Existing Description: {page_content['existing_description']}
-- H1 Tags: {page_content['h1']}
-- First Paragraph: {page_content['first_paragraph']}
+Page Content Analysis:
+- Current Title: {page_content['existing_title']}
+- Current Description: {page_content['existing_description']}
+- H1 Headings: {page_content['h1']}
+- H2 Headings: {page_content['h2']}
+- Opening Paragraph: {page_content['first_paragraph']}
 
-Requirements:
-1. Meta Title: 55-60 characters (STRICT - must be between 55-60 chars)
-2. Meta Description: 150-160 characters (STRICT - must be between 150-160 chars)
-3. Include primary keyword naturally if provided
-4. Make it compelling and click-worthy
-5. Ensure accuracy to page content
-6. Use active voice and clear language
+CRITICAL REQUIREMENTS:
 
-Return ONLY a valid JSON object with this exact structure (no markdown, no backticks, no additional text):
-{{"meta_title": "your title here", "meta_description": "your description here"}}"""
+Meta Title Rules (NON-NEGOTIABLE):
+1. Maximum 60 characters INCLUDING spaces and brand suffix
+2. MUST end with " | {brand_name if brand_name else '[Brand]'}" format
+3. Include primary keyword naturally in the first half
+4. Front-load the most important keyword
+5. Be specific and descriptive
+6. Avoid generic words like "Best", "Top" unless truly relevant
+7. Example format: "Keyword-Rich Specific Benefit | Brand"
+
+Meta Description Rules (NON-NEGOTIABLE):
+1. STRICT maximum of 150 characters INCLUDING spaces
+2. MUST include exactly ONE clear call-to-action (CTA)
+3. Include primary keyword naturally in the first 50 characters
+4. VARY the writing style - use ONE of these approaches:
+   A) Descriptive Statement + CTA (60% of cases)
+      Example: "Professional SEO tools for digital marketers. Get real-time SERP data. Start your free trial."
+   
+   B) Question + Answer + CTA (20% of cases)
+      Example: "Need reliable SEO analysis? Our AI-powered tools deliver instant insights. Try it free today."
+   
+   C) Benefit-Focused + CTA (20% of cases)
+      Example: "Save 10 hours weekly with automated keyword research and competitor analysis. Get started now."
+
+5. AVOID overusing "Scopri" - use varied CTAs:
+   - "Prova ora" / "Try now"
+   - "Inizia gratis" / "Start free"
+   - "Richiedi demo" / "Request demo"
+   - "Leggi di più" / "Learn more"
+   - "Scarica la guida" / "Download guide"
+   - "Contattaci" / "Contact us"
+   - "Ottieni accesso" / "Get access"
+   
+6. Be specific about benefits, not vague
+7. Use active voice
+8. Include numbers when relevant (e.g., "Save 50%", "10+ features")
+9. Make it compelling and clickworthy
+10. Ensure exactly ONE CTA per description - never multiple CTAs
+
+OUTPUT FORMAT:
+Return ONLY a valid JSON object with NO markdown, NO backticks, NO additional text:
+{{"meta_title": "your title here | {brand_name if brand_name else 'Brand'}", "meta_description": "your description here with ONE CTA"}}
+
+Remember: 
+- Title MAX 60 chars (including brand suffix with " | Brand")
+- Description MAX 150 chars
+- ONE CTA only in description
+- Vary description style (descriptive, question-based, benefit-focused)
+- Do NOT always use "Scopri" - vary your CTAs
+- Be specific and benefit-oriented
+- Count your characters carefully before outputting"""
 
     for attempt in range(retry):
         try:
@@ -290,7 +366,8 @@ Return ONLY a valid JSON object with this exact structure (no markdown, no backt
             
             payload = {
                 "model": "claude-sonnet-4-20250514",
-                "max_tokens": 500,
+                "max_tokens": 600,
+                "temperature": 0.7,  # Slightly higher for varied outputs
                 "messages": [
                     {
                         "role": "user",
@@ -316,10 +393,27 @@ Return ONLY a valid JSON object with this exact structure (no markdown, no backt
                 # Parse JSON
                 result = json.loads(content)
                 
+                meta_title = result.get('meta_title', '')
+                meta_description = result.get('meta_description', '')
+                
+                # Validation checks
+                if len(meta_title) > 60:
+                    meta_title = meta_title[:57] + "..."
+                
+                if len(meta_description) > 150:
+                    meta_description = meta_description[:147] + "..."
+                
+                # Ensure brand suffix in title
+                if brand_name and f"| {brand_name}" not in meta_title:
+                    # Try to add brand if space allows
+                    base_title = meta_title.replace(f"| {brand_name}", "").strip()
+                    if len(base_title) + len(f" | {brand_name}") <= 60:
+                        meta_title = f"{base_title} | {brand_name}"
+                
                 return {
                     'success': True,
-                    'meta_title': result.get('meta_title', ''),
-                    'meta_description': result.get('meta_description', ''),
+                    'meta_title': meta_title,
+                    'meta_description': meta_description,
                     'error': None
                 }
             
@@ -390,6 +484,9 @@ if st.button("🚀 Generate Meta Tags", type="primary", use_container_width=True
         st.error("❌ Please insert your Anthropic API key in the sidebar")
         st.stop()
     
+    if not brand_name:
+        st.warning("⚠️ Brand name not specified. Will attempt to extract from domain.")
+    
     if not page_urls.strip():
         st.error("❌ Please insert at least one page URL")
         st.stop()
@@ -428,6 +525,9 @@ if st.button("🚀 Generate Meta Tags", type="primary", use_container_width=True
     for idx, (url, keyword) in enumerate(zip(urls, keyword_list)):
         status_text.text(f"🔄 Processing {idx+1}/{total_urls}: {url[:50]}...")
         
+        # Extract brand from domain if not provided
+        current_brand = brand_name if brand_name else extract_domain_name(url)
+        
         # Step 1: Scrape page content
         page_content = scrape_page_content(url)
         
@@ -435,6 +535,7 @@ if st.button("🚀 Generate Meta Tags", type="primary", use_container_width=True
             results.append({
                 'URL': url,
                 'Primary Keyword': keyword,
+                'Brand': current_brand,
                 'Meta Title': '',
                 'Meta Description': '',
                 'Title Length': 0,
@@ -457,6 +558,7 @@ if st.button("🚀 Generate Meta Tags", type="primary", use_container_width=True
             url=url,
             page_content=page_content,
             primary_keyword=keyword,
+            brand_name=current_brand,
             api_key=api_key,
             retry=retry_attempts
         )
@@ -468,6 +570,7 @@ if st.button("🚀 Generate Meta Tags", type="primary", use_container_width=True
             results.append({
                 'URL': url,
                 'Primary Keyword': keyword if keyword else 'Auto-extracted',
+                'Brand': current_brand,
                 'Meta Title': meta_title,
                 'Meta Description': meta_desc,
                 'Title Length': len(meta_title),
@@ -479,6 +582,7 @@ if st.button("🚀 Generate Meta Tags", type="primary", use_container_width=True
             results.append({
                 'URL': url,
                 'Primary Keyword': keyword,
+                'Brand': current_brand,
                 'Meta Title': '',
                 'Meta Description': '',
                 'Title Length': 0,
@@ -544,30 +648,28 @@ if st.button("🚀 Generate Meta Tags", type="primary", use_container_width=True
         # Quality check warnings
         issues = []
         
-        # Check title lengths
-        short_titles = df[(df['Status'] == 'Success') & (df['Title Length'] < 55)]
+        # Check title lengths (strict 60 max)
         long_titles = df[(df['Status'] == 'Success') & (df['Title Length'] > 60)]
-        
-        if len(short_titles) > 0:
-            issues.append(f"⚠️ {len(short_titles)} title(s) are too short (<55 chars)")
-        
         if len(long_titles) > 0:
-            issues.append(f"⚠️ {len(long_titles)} title(s) are too long (>60 chars)")
+            issues.append(f"⚠️ {len(long_titles)} title(s) exceed 60 characters")
         
-        # Check description lengths
-        short_descs = df[(df['Status'] == 'Success') & (df['Description Length'] < 150)]
-        long_descs = df[(df['Status'] == 'Success') & (df['Description Length'] > 160)]
-        
-        if len(short_descs) > 0:
-            issues.append(f"⚠️ {len(short_descs)} description(s) are too short (<150 chars)")
-        
+        # Check description lengths (strict 150 max)
+        long_descs = df[(df['Status'] == 'Success') & (df['Description Length'] > 150)]
         if len(long_descs) > 0:
-            issues.append(f"⚠️ {len(long_descs)} description(s) are too long (>160 chars)")
+            issues.append(f"⚠️ {len(long_descs)} description(s) exceed 150 characters")
+        
+        # Check for brand suffix in titles
+        if brand_name:
+            missing_brand = df[(df['Status'] == 'Success') & (~df['Meta Title'].str.contains(f"| {brand_name}", case=False, na=False))]
+            if len(missing_brand) > 0:
+                issues.append(f"⚠️ {len(missing_brand)} title(s) missing brand suffix '| {brand_name}'")
         
         if issues:
             st.markdown("### ⚠️ Quality Warnings")
             for issue in issues:
                 st.warning(issue)
+        else:
+            st.success("✅ All meta tags meet SEO quality standards!")
         
         # Download section
         st.markdown("---")
@@ -650,5 +752,6 @@ st.markdown("""
 <div style='text-align: center; color: #666; padding: 2rem 0;'>
     <p><strong>AvantGrade.com</strong> • Meta Tag Generator</p>
     <p>Powered by Claude Sonnet 4.5 • Professional SEO Tools Suite</p>
+    <p style='font-size: 0.85em; margin-top: 0.5rem;'>v1.1 - Enhanced SEO Optimization</p>
 </div>
 """, unsafe_allow_html=True)
