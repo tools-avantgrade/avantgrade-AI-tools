@@ -196,7 +196,7 @@ st.markdown("""
 st.markdown("---")
 
 # ===============================
-# Sidebar (Minimal)
+# Sidebar
 # ===============================
 with st.sidebar:
     st.markdown("### ⚙️ Configurazione")
@@ -216,6 +216,23 @@ with st.sidebar:
         "Anthropic API Key",
         type="password",
         help="Ottieni la tua API key da console.anthropic.com"
+    )
+
+    st.markdown("---")
+
+    # Language selector
+    output_language = st.selectbox(
+        "🌍 Lingua Output Categorie",
+        [
+            "English",
+            "Italiano", 
+            "Español",
+            "Français",
+            "Deutsch",
+            "Português"
+        ],
+        index=0,
+        help="Lingua in cui verranno generati i nomi e le descrizioni delle categorie"
     )
 
     st.markdown("---")
@@ -251,7 +268,7 @@ with st.sidebar:
     st.markdown("---")
     st.markdown("**Modello:** Claude Sonnet 4.5")
     st.markdown("**Max keywords:** 5000+")
-    st.markdown("**Output:** Always English")
+    st.markdown(f"**Output:** {output_language}")
     st.markdown("**⚠️ Delay:** 60s tra batch")
 
 # ===============================
@@ -435,7 +452,7 @@ def normalize_clusters(batch_result):
 # ===============================
 # Funzione clustering (Claude)
 # ===============================
-def cluster_keywords_claude(keywords_list, api_key, batch_size, custom_cats, mode, max_clusters, products_list=None, macro_theme=None):
+def cluster_keywords_claude(keywords_list, api_key, batch_size, custom_cats, mode, max_clusters, output_language, products_list=None, macro_theme=None):
     try:
         client = Anthropic(api_key=api_key)
         all_clusters = []
@@ -487,10 +504,11 @@ Use this theme to better understand the overall context of the keyword research.
 
                 prompt = f"""You are an expert SEO keyword intent analyzer.
 
-CRITICAL INSTRUCTIONS:
-- ALWAYS respond in ENGLISH (category names, descriptions in English)
-- Keywords can be in ANY language - you must understand them all
-- Output JSON with English category names and descriptions
+CRITICAL LANGUAGE INSTRUCTION:
+- ALL category names MUST be in {output_language}
+- ALL category descriptions MUST be in {output_language}
+- Keywords remain in their original language
+- Your JSON output must have category names and descriptions in {output_language}
 
 {context_section}
 
@@ -499,11 +517,16 @@ TASK: Categorize keywords by USER SEARCH INTENT (why they're searching), NOT by 
 KEYWORDS ({len(batch_keywords)} - may be in any language):
 {chr(10).join(f"{i+1}. {kw}" for i, kw in enumerate(batch_keywords))}
 
-YOUR PREDEFINED CATEGORIES WITH DESCRIPTIONS (in English):
+YOUR PREDEFINED CATEGORIES WITH DESCRIPTIONS:
 {categories_text}
 
 IMPORTANT: Use the category DESCRIPTIONS as your PRIMARY guide for assignment.
 Each description tells you EXACTLY what kind of keywords belong in that category.
+
+OUTPUT LANGUAGE REQUIREMENT:
+- Translate category names to {output_language}
+- Write descriptions in {output_language}
+- Keep keywords in original language
 
 BRAND DETECTION:
 - If keyword contains a recognizable brand name (Armani, Dior, MAC, Nike, Apple, Samsung, KIKO, etc.), extract it
@@ -514,21 +537,21 @@ RULES:
 - {extra_instruction}
 - EVERY keyword must be categorized (all {len(batch_keywords)})
 - Think: "WHY is the user searching this?" and match to category description
-- Keep your "description" field SHORT (max 10 words, in English)
-- Category names and descriptions MUST be in English
+- Keep your "description" field SHORT (max 10 words, in {output_language})
+- Category names and descriptions MUST be in {output_language}
 
 JSON FORMAT:
 {{
   "clusters": [
     {{
-      "cluster_name": "Exact category name from list (English)",
+      "cluster_name": "Category name in {output_language}",
       "keywords": [
         {{
           "keyword": "the keyword (original language)",
           "brand": "Brand Name or null"
         }}
       ],
-      "description": "Brief reason for grouping (English, max 10 words)"
+      "description": "Brief reason in {output_language} (max 10 words)"
     }}
   ]
 }}"""
@@ -536,10 +559,11 @@ JSON FORMAT:
                 # AUTO mode - genera categorie
                 prompt = f"""You are an expert SEO keyword intent analyzer.
 
-CRITICAL INSTRUCTIONS:
-- ALWAYS respond in ENGLISH (category names, descriptions in English)
-- Keywords can be in ANY language - you must understand them all
-- Output JSON with English category names and descriptions
+CRITICAL LANGUAGE INSTRUCTION:
+- ALL category names MUST be in {output_language}
+- ALL category descriptions MUST be in {output_language}
+- Keywords remain in their original language
+- Your JSON output must have category names and descriptions in {output_language}
 
 {context_section}
 
@@ -548,7 +572,7 @@ TASK: Categorize keywords by USER SEARCH INTENT (why they're searching), NOT by 
 KEYWORDS ({len(batch_keywords)} - may be in any language):
 {chr(10).join(f"{i+1}. {kw}" for i, kw in enumerate(batch_keywords))}
 
-INTENT CATEGORIZATION LOGIC (create categories with English names):
+INTENT CATEGORIZATION LOGIC (create categories with names in {output_language}):
 
 1. **Generic**: Vague, broad searches with NO specific intent signals
    Examples: "armani lipstick", "nike shoes", "samsung phone", "rossetto", "zapatos"
@@ -574,31 +598,36 @@ INTENT CATEGORIZATION LOGIC (create categories with English names):
 7. **Problem / Solution**: Addresses specific problem
    Examples: "mascara that doesn't smudge", "laptop for gaming"
 
+OUTPUT LANGUAGE REQUIREMENT:
+- Create category names in {output_language}
+- Write descriptions in {output_language}
+- Keep keywords in original language
+
 BRAND DETECTION:
 - Extract recognizable brand names to "brand" field
 - Capitalize properly (Armani, Nike, Samsung, KIKO, etc.)
 - Do NOT create "Brand Specific" categories
 
-CREATE: 5-{max_clusters} intent categories with English names
+CREATE: 5-{max_clusters} intent categories with names in {output_language}
 RULES:
 - EVERY keyword must be categorized (all {len(batch_keywords)})
 - Think: "WHY is the user searching this?"
 - Focus on INTENT, not product type
-- Keep "description" field SHORT (max 10 words, in English)
-- Category names MUST be in English
+- Keep "description" field SHORT (max 10 words, in {output_language})
+- Category names MUST be in {output_language}
 
 JSON FORMAT:
 {{
   "clusters": [
     {{
-      "cluster_name": "Intent Category Name (English)",
+      "cluster_name": "Intent Category Name in {output_language}",
       "keywords": [
         {{
           "keyword": "the keyword (original language)",
           "brand": "Brand Name or null"
         }}
       ],
-      "description": "Brief reason (English, max 10 words)"
+      "description": "Brief reason in {output_language} (max 10 words)"
     }}
   ]
 }}"""
@@ -706,10 +735,10 @@ JSON FORMAT:
             "total_keywords": total_clustered,
             "total_keywords_input": len(keywords_list),
             "total_clusters": len(all_clusters),
-            "generic_count": sum(len(c.get('keywords', [])) for c in all_clusters if cname(c) == 'generic'),
-            "buy_compare_count": sum(len(c.get('keywords', [])) for c in all_clusters if 'buy' in cname(c) or 'compare' in cname(c)),
-            "local_count": sum(len(c.get('keywords', [])) for c in all_clusters if 'local' in cname(c)),
-            "howto_count": sum(len(c.get('keywords', [])) for c in all_clusters if 'how to' in cname(c)),
+            "generic_count": sum(len(c.get('keywords', [])) for c in all_clusters if cname(c) == 'generic' or 'generico' in cname(c) or 'générique' in cname(c)),
+            "buy_compare_count": sum(len(c.get('keywords', [])) for c in all_clusters if 'buy' in cname(c) or 'compare' in cname(c) or 'acquist' in cname(c) or 'compar' in cname(c)),
+            "local_count": sum(len(c.get('keywords', [])) for c in all_clusters if 'local' in cname(c) or 'locale' in cname(c)),
+            "howto_count": sum(len(c.get('keywords', [])) for c in all_clusters if 'how to' in cname(c) or 'come' in cname(c) or 'tutorial' in cname(c)),
             "branded_count": sum(
                 1
                 for c in all_clusters
@@ -741,7 +770,7 @@ if analyze_btn:
         if len(keywords_list) < 3:
             st.warning("⚠️ Minimo 3 keywords richieste")
         else:
-            with st.spinner('🤖 Clustering intent-based con Claude...'):
+            with st.spinner(f'🤖 Clustering intent-based con Claude (output in {output_language})...'):
                 progress = st.progress(0)
                 progress.progress(30)
 
@@ -752,6 +781,7 @@ if analyze_btn:
                     valid_cats,
                     clustering_mode,
                     max_clusters,
+                    output_language,
                     products_list,
                     macro_theme
                 )
@@ -768,7 +798,7 @@ if analyze_btn:
                 summary_items = [
                     f"• {result['summary']['total_keywords_input']} keywords inviate",
                     f"• {result['summary']['total_keywords']} keywords categorizzate",
-                    f"• {result['summary']['total_clusters']} categorie create",
+                    f"• {result['summary']['total_clusters']} categorie create (in {output_language})",
                     f"• {result['summary']['branded_count']} keywords con brand"
                 ]
                 
