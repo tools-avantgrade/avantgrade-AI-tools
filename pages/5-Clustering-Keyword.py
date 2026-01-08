@@ -449,6 +449,89 @@ def normalize_clusters(batch_result):
 
     return valid_clusters
 
+
+def consolidate_clusters(all_clusters, max_categories=None):
+    """
+    Consolida i cluster con lo stesso nome e applica il limite di categorie.
+    Restituisce i cluster consolidati e il numero di categorie uniche.
+    """
+    # Raggruppa cluster per nome (case-insensitive)
+    cluster_map = {}
+    for cluster in all_clusters:
+        name = cluster.get('cluster_name', 'Uncategorized').strip()
+        name_lower = name.lower()
+
+        if name_lower not in cluster_map:
+            cluster_map[name_lower] = {
+                'cluster_name': name,
+                'description': cluster.get('description', ''),
+                'keywords': []
+            }
+
+        # Aggiungi keywords evitando duplicati
+        existing_kws = {kw['keyword'].lower() for kw in cluster_map[name_lower]['keywords']}
+        for kw in cluster.get('keywords', []):
+            if kw['keyword'].lower() not in existing_kws:
+                cluster_map[name_lower]['keywords'].append(kw)
+                existing_kws.add(kw['keyword'].lower())
+
+    # Converti in lista e ordina per numero di keywords (decrescente)
+    consolidated = list(cluster_map.values())
+    consolidated.sort(key=lambda x: len(x['keywords']), reverse=True)
+
+    # Se abbiamo più categorie del limite, uniamo quelle in eccesso in "Altre"
+    if max_categories and len(consolidated) > max_categories:
+        main_categories = consolidated[:max_categories - 1]
+        overflow_categories = consolidated[max_categories - 1:]
+
+        # Unisci le categorie in eccesso in "Altre categorie"
+        overflow_keywords = []
+        for cat in overflow_categories:
+            overflow_keywords.extend(cat['keywords'])
+
+        if overflow_keywords:
+            main_categories.append({
+                'cluster_name': 'Altre categorie',
+                'description': f'Categorie aggiuntive consolidate ({len(overflow_categories)} categorie)',
+                'keywords': overflow_keywords
+            })
+
+        consolidated = main_categories
+
+    unique_categories = len(consolidated)
+    return consolidated, unique_categories
+
+
+def add_uncategorized_keywords(all_clusters, original_keywords):
+    """
+    Aggiunge le keyword non categorizzate al risultato finale.
+    Restituisce i cluster aggiornati e la lista delle keyword non categorizzate.
+    """
+    # Estrai tutte le keyword categorizzate (normalizzate per confronto)
+    categorized_keywords = set()
+    for cluster in all_clusters:
+        for kw in cluster.get('keywords', []):
+            if isinstance(kw, dict):
+                categorized_keywords.add(kw['keyword'].strip().lower())
+            else:
+                categorized_keywords.add(str(kw).strip().lower())
+
+    # Trova keyword non categorizzate
+    uncategorized = []
+    for kw in original_keywords:
+        if kw.strip().lower() not in categorized_keywords:
+            uncategorized.append({'keyword': kw.strip(), 'brand': None})
+
+    # Se ci sono keyword non categorizzate, aggiungile come cluster separato
+    if uncategorized:
+        all_clusters.append({
+            'cluster_name': 'Non Categorizzate',
+            'description': 'Keyword non assegnate a nessuna categoria',
+            'keywords': uncategorized
+        })
+
+    return all_clusters, uncategorized
+
 # ===============================
 # Funzione clustering (Claude)
 # ===============================
@@ -498,9 +581,15 @@ Use this theme to better understand the overall context of the keyword research.
                 )
                 
                 if mode == "Custom (tu definisci categorie)":
-                    extra_instruction = f"Use ONLY these {len(custom_cats)} categories as PRIMARY guide. You can create max {max_clusters} additional categories ONLY if absolutely necessary."
+                    extra_instruction = f"""STRICT CATEGORY LIMIT: You MUST use ONLY these {len(custom_cats)} predefined categories.
+You are allowed to create a MAXIMUM of {max_clusters} additional categories ONLY if a keyword absolutely cannot fit any predefined category.
+TOTAL categories (predefined + new) MUST NOT exceed {len(custom_cats) + max_clusters}.
+If unsure, assign to 'Generic' rather than creating new categories."""
                 else:
-                    extra_instruction = f"Prefer these {len(custom_cats)} categories. Create max {max_clusters} additional categories ONLY if needed."
+                    extra_instruction = f"""STRICT CATEGORY LIMIT: Strongly prefer these {len(custom_cats)} predefined categories.
+Create additional categories ONLY if absolutely necessary, with a HARD MAXIMUM of {max_clusters} total categories.
+NEVER exceed {max_clusters} total categories - if you need more, consolidate similar keywords into existing categories.
+If unsure, assign to 'Generic' rather than creating new categories."""
 
                 prompt = f"""You are an expert SEO keyword intent analyzer.
 
@@ -608,13 +697,17 @@ BRAND DETECTION:
 - Capitalize properly (Armani, Nike, Samsung, KIKO, etc.)
 - Do NOT create "Brand Specific" categories
 
-CREATE: 5-{max_clusters} intent categories with names in {output_language}
+STRICT CATEGORY LIMIT: Create between 5 and {max_clusters} intent categories with names in {output_language}.
+⚠️ HARD LIMIT: You MUST NOT exceed {max_clusters} categories. This is a strict requirement.
+If you have more keyword types than {max_clusters}, consolidate similar intents into broader categories.
+
 RULES:
 - EVERY keyword must be categorized (all {len(batch_keywords)})
 - Think: "WHY is the user searching this?"
 - Focus on INTENT, not product type
 - Keep "description" field SHORT (max 10 words, in {output_language})
 - Category names MUST be in {output_language}
+- NEVER create more than {max_clusters} categories - consolidate if needed
 
 JSON FORMAT:
 {{
@@ -722,32 +815,48 @@ JSON FORMAT:
                     st.text(f"{{ : {result_text.count('{') - result_text.count('}')}")
                 return None, f"JSON error: {str(e)}"
 
+        # 1. Consolida cluster con lo stesso nome da batch diversi
+        consolidated_clusters, unique_categories_before = consolidate_clusters(all_clusters, max_clusters)
+
+        # 2. Aggiungi keyword non categorizzate
+        final_clusters, uncategorized_kws = add_uncategorized_keywords(consolidated_clusters, keywords_list)
+
+        # Ricalcola unique categories dopo aver aggiunto "Non Categorizzate"
+        unique_categories = len(final_clusters)
+
         # Totali
-        total_clustered = sum(len(c.get('keywords', [])) for c in all_clusters)
-        missing_total = len(keywords_list) - total_clustered
-        if missing_total > 0:
-            st.warning(f"⚠️ TOTALE: {missing_total} keyword non categorizzate su {len(keywords_list)}")
+        total_in_output = sum(len(c.get('keywords', [])) for c in final_clusters)
+        total_categorized = total_in_output - len(uncategorized_kws)
+
+        # Info sui risultati
+        if len(uncategorized_kws) > 0:
+            st.warning(f"⚠️ {len(uncategorized_kws)} keyword non categorizzate - aggiunte alla categoria 'Non Categorizzate'")
+
+        st.info(f"📊 **Categorie uniche generate:** {unique_categories} (limite impostato: {max_clusters})")
 
         def cname(c):
             return (c.get('cluster_name') or '').lower()
 
         summary = {
-            "total_keywords": total_clustered,
+            "total_keywords": total_categorized,
             "total_keywords_input": len(keywords_list),
-            "total_clusters": len(all_clusters),
-            "generic_count": sum(len(c.get('keywords', [])) for c in all_clusters if cname(c) == 'generic' or 'generico' in cname(c) or 'générique' in cname(c)),
-            "buy_compare_count": sum(len(c.get('keywords', [])) for c in all_clusters if 'buy' in cname(c) or 'compare' in cname(c) or 'acquist' in cname(c) or 'compar' in cname(c)),
-            "local_count": sum(len(c.get('keywords', [])) for c in all_clusters if 'local' in cname(c) or 'locale' in cname(c)),
-            "howto_count": sum(len(c.get('keywords', [])) for c in all_clusters if 'how to' in cname(c) or 'come' in cname(c) or 'tutorial' in cname(c)),
+            "total_keywords_output": total_in_output,
+            "total_clusters": len(all_clusters),  # Cluster prima della consolidazione
+            "unique_categories": unique_categories,  # Categorie uniche dopo consolidazione
+            "uncategorized_count": len(uncategorized_kws),
+            "generic_count": sum(len(c.get('keywords', [])) for c in final_clusters if cname(c) == 'generic' or 'generico' in cname(c) or 'générique' in cname(c)),
+            "buy_compare_count": sum(len(c.get('keywords', [])) for c in final_clusters if 'buy' in cname(c) or 'compare' in cname(c) or 'acquist' in cname(c) or 'compar' in cname(c)),
+            "local_count": sum(len(c.get('keywords', [])) for c in final_clusters if 'local' in cname(c) or 'locale' in cname(c)),
+            "howto_count": sum(len(c.get('keywords', [])) for c in final_clusters if 'how to' in cname(c) or 'come' in cname(c) or 'tutorial' in cname(c)),
             "branded_count": sum(
                 1
-                for c in all_clusters
+                for c in final_clusters
                 for kw in c.get('keywords', [])
                 if isinstance(kw, dict) and kw.get('brand')
             )
         }
 
-        return {"clusters": all_clusters, "summary": summary}, None
+        return {"clusters": final_clusters, "summary": summary}, None
 
     except Exception as e:
         return None, f"Errore: {str(e)}"
@@ -795,13 +904,15 @@ if analyze_btn:
             else:
                 st.session_state['clustering_results'] = result
 
+                uncategorized_count = result['summary'].get('uncategorized_count', 0)
                 summary_items = [
                     f"• {result['summary']['total_keywords_input']} keywords inviate",
-                    f"• {result['summary']['total_keywords']} keywords categorizzate",
-                    f"• {result['summary']['total_clusters']} categorie create (in {output_language})",
+                    f"• {result['summary']['total_keywords']} keywords categorizzate con successo",
+                    f"• {uncategorized_count} keywords non categorizzate (incluse nell'output)",
+                    f"• **{result['summary']['unique_categories']} CATEGORIE UNICHE** (in {output_language})",
                     f"• {result['summary']['branded_count']} keywords con brand"
                 ]
-                
+
                 if products_list:
                     summary_items.append(f"• {len(products_list)} prodotti nel contesto")
                 if macro_theme:
@@ -823,6 +934,25 @@ if 'clustering_results' in st.session_state:
     st.markdown("---")
     st.markdown("## 📊 Risultati")
 
+    # Mostra statistiche chiave in evidenza
+    unique_cats = result['summary'].get('unique_categories', len(result.get('clusters', [])))
+    total_kw_input = result['summary'].get('total_keywords_input', 0)
+    total_kw_output = result['summary'].get('total_keywords_output', total_kw_input)
+    uncategorized = result['summary'].get('uncategorized_count', 0)
+
+    col_stat1, col_stat2, col_stat3, col_stat4 = st.columns(4)
+    with col_stat1:
+        st.metric("Keywords Input", total_kw_input)
+    with col_stat2:
+        st.metric("Keywords Output", total_kw_output)
+    with col_stat3:
+        st.metric("🎯 Categorie UNICHE", unique_cats)
+    with col_stat4:
+        st.metric("Non Categorizzate", uncategorized)
+
+    st.markdown("---")
+
+    # Costruisci tabella ordinata per categoria
     table_data = []
     for idx, cluster in enumerate(result.get('clusters', []), 1):
         c_name = cluster.get('cluster_name', 'Uncategorized')
@@ -845,6 +975,11 @@ if 'clustering_results' in st.session_state:
             })
 
     df = pd.DataFrame(table_data)
+
+    # Ordina per Category # (che riflette già l'ordine per dimensione) per raggruppare
+    df = df.sort_values(by=['Category #', 'Keyword']).reset_index(drop=True)
+
+    st.markdown(f"### 📋 Tabella Keywords ({len(df)} righe, {unique_cats} categorie uniche)")
     st.dataframe(df, use_container_width=True, height=500)
 
     st.markdown("---")
@@ -856,8 +991,10 @@ if 'clustering_results' in st.session_state:
 
         summary_df = pd.DataFrame([{
             'Total Keywords Input': result['summary'].get('total_keywords_input', 0),
+            'Total Keywords Output': result['summary'].get('total_keywords_output', 0),
             'Total Keywords Categorized': result['summary'].get('total_keywords', 0),
-            'Total Categories': result['summary'].get('total_clusters', 0),
+            'Uncategorized Keywords': result['summary'].get('uncategorized_count', 0),
+            'UNIQUE Categories': result['summary'].get('unique_categories', 0),
             'Keywords with Brand': result['summary'].get('branded_count', 0),
             'Generic Count': result['summary'].get('generic_count', 0),
             'Buy/Compare Count': result['summary'].get('buy_compare_count', 0),
@@ -888,4 +1025,4 @@ if 'clustering_results' in st.session_state:
     )
 
     st.markdown("---")
-    st.markdown(f"**Powered by Claude Sonnet 4.5** • {result['summary'].get('total_keywords', 0)}/{result['summary'].get('total_keywords_input', 0)} keywords • {result['summary'].get('total_clusters', 0)} categories")
+    st.markdown(f"**Powered by Claude Sonnet 4.5** • {result['summary'].get('total_keywords_output', result['summary'].get('total_keywords_input', 0))}/{result['summary'].get('total_keywords_input', 0)} keywords in output • **{result['summary'].get('unique_categories', 0)} categorie uniche**")
