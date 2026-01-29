@@ -452,7 +452,8 @@ def normalize_clusters(batch_result):
 
 def consolidate_clusters(all_clusters, max_categories=None):
     """
-    Consolida i cluster con lo stesso nome e applica il limite di categorie.
+    Consolida i cluster con lo stesso nome.
+    Non applica più il limite qui - le categorie sono già definite nella fase 1.
     Restituisce i cluster consolidati e il numero di categorie uniche.
     """
     # Raggruppa cluster per nome (case-insensitive)
@@ -479,27 +480,180 @@ def consolidate_clusters(all_clusters, max_categories=None):
     consolidated = list(cluster_map.values())
     consolidated.sort(key=lambda x: len(x['keywords']), reverse=True)
 
-    # Se abbiamo più categorie del limite, uniamo quelle in eccesso in "Altre"
-    if max_categories and len(consolidated) > max_categories:
-        main_categories = consolidated[:max_categories - 1]
-        overflow_categories = consolidated[max_categories - 1:]
-
-        # Unisci le categorie in eccesso in "Altre categorie"
-        overflow_keywords = []
-        for cat in overflow_categories:
-            overflow_keywords.extend(cat['keywords'])
-
-        if overflow_keywords:
-            main_categories.append({
-                'cluster_name': 'Altre categorie',
-                'description': f'Categorie aggiuntive consolidate ({len(overflow_categories)} categorie)',
-                'keywords': overflow_keywords
-            })
-
-        consolidated = main_categories
-
     unique_categories = len(consolidated)
     return consolidated, unique_categories
+
+
+def analyze_and_define_categories(client, all_keywords, max_clusters, output_language, custom_cats, mode, products_list=None, macro_theme=None):
+    """
+    FASE 1: Analizza TUTTE le keyword per definire le categorie ottimali.
+    L'AI ha visione globale del dataset prima di decidere quali categorie creare.
+    Restituisce una lista di categorie definite con nome e descrizione.
+    """
+    # Prepara un campione rappresentativo se ci sono troppe keyword
+    # Usiamo max 500 keyword per l'analisi, campionando uniformemente
+    if len(all_keywords) > 500:
+        step = len(all_keywords) // 500
+        sample_keywords = all_keywords[::step][:500]
+        sample_note = f"(campione rappresentativo di {len(sample_keywords)} su {len(all_keywords)} keyword totali)"
+    else:
+        sample_keywords = all_keywords
+        sample_note = f"(tutte le {len(sample_keywords)} keyword)"
+
+    # Prepara contesto
+    context_section = ""
+    if products_list:
+        products_text = "\n".join(f"- {p}" for p in products_list[:50])  # Max 50 prodotti nel contesto
+        context_section += f"""
+PRODUCT CONTEXT:
+{products_text}
+"""
+    if macro_theme:
+        context_section += f"""
+MACRO THEME(S): {macro_theme}
+"""
+
+    # Costruisci il prompt per definire le categorie
+    if mode == "Custom (tu definisci categorie)" and custom_cats:
+        # Modalità custom: usa le categorie predefinite come base
+        categories_text = "\n".join(
+            f"- **{cat['name']}**: {cat['description']}"
+            for cat in custom_cats
+            if cat['name'].strip()
+        )
+
+        prompt = f"""You are an expert SEO keyword intent analyzer.
+
+CRITICAL TASK: Analyze ALL the keywords below and define the OPTIMAL categories for this dataset.
+
+{context_section}
+
+PREDEFINED CATEGORIES (use these as your base):
+{categories_text}
+
+ALL KEYWORDS TO ANALYZE {sample_note}:
+{chr(10).join(f"{i+1}. {kw}" for i, kw in enumerate(sample_keywords))}
+
+YOUR TASK:
+1. Review ALL keywords above to understand the full scope of search intents
+2. Use the predefined categories as your primary categories
+3. You may add up to 2-3 additional categories ONLY if there are clear keyword groups that don't fit the predefined ones
+4. TOTAL categories MUST NOT exceed {max_clusters}
+
+OUTPUT LANGUAGE: All category names and descriptions MUST be in {output_language}
+
+IMPORTANT:
+- Look at the ENTIRE keyword list before deciding on categories
+- Categories should cover ALL keywords without needing an "Other" catch-all category
+- Each category must be distinct and meaningful
+- Think about search INTENT (why user is searching), not product type
+
+Return ONLY a JSON with the final category definitions:
+{{
+  "categories": [
+    {{
+      "name": "Category Name in {output_language}",
+      "description": "Clear description of what keywords belong here (in {output_language})"
+    }}
+  ]
+}}"""
+    else:
+        # Modalità auto: genera categorie da zero basandosi su tutte le keyword
+        suggested_cats = ""
+        if custom_cats and len(custom_cats) > 0:
+            cats_text = ", ".join(cat['name'] for cat in custom_cats if cat['name'].strip())
+            suggested_cats = f"\nSUGGESTED CATEGORIES (consider these if appropriate): {cats_text}"
+
+        prompt = f"""You are an expert SEO keyword intent analyzer.
+
+CRITICAL TASK: Analyze ALL the keywords below and define the OPTIMAL {max_clusters} categories for this dataset.
+
+{context_section}
+{suggested_cats}
+
+ALL KEYWORDS TO ANALYZE {sample_note}:
+{chr(10).join(f"{i+1}. {kw}" for i, kw in enumerate(sample_keywords))}
+
+YOUR TASK:
+1. Review ALL keywords above to understand the full scope of search intents
+2. Identify the main search intent patterns across the ENTIRE dataset
+3. Create EXACTLY {max_clusters} categories that will cover ALL keywords
+4. Categories must be based on USER INTENT (why they're searching), not product type
+
+OUTPUT LANGUAGE: All category names and descriptions MUST be in {output_language}
+
+CATEGORY DESIGN PRINCIPLES:
+- Look at the ENTIRE keyword list before deciding on categories
+- Categories should be mutually exclusive when possible
+- Every keyword must fit into one of your categories - NO "Other" or "Miscellaneous" catch-all!
+- If a group of keywords doesn't fit existing categories, create a specific category for them
+- Balance category sizes - avoid one huge category and many tiny ones
+
+COMMON INTENT CATEGORIES (use as inspiration, adapt to your data):
+- Generic/Navigational: Brand + product searches with no specific intent
+- Buy/Compare: Shopping, comparison, "best", "top", "vs" searches
+- Local: "near me", "store", location-based searches
+- How To/Educational: Tutorials, guides, "how to" searches
+- Problem/Solution: Searches addressing specific issues
+- Feature/Specification: Searches for specific attributes
+
+Return ONLY a JSON with your {max_clusters} category definitions:
+{{
+  "categories": [
+    {{
+      "name": "Category Name in {output_language}",
+      "description": "Clear description of what keywords belong here - be specific about intent signals (in {output_language})"
+    }}
+  ]
+}}"""
+
+    # Chiama l'API
+    try:
+        response = client.messages.create(
+            model="claude-sonnet-4-20250514",
+            max_tokens=4000,
+            messages=[{"role": "user", "content": prompt}]
+        )
+
+        result_text = response.content[0].text.strip()
+
+        # Pulisci markdown
+        if "```json" in result_text:
+            result_text = result_text.split("```json")[1].split("```")[0].strip()
+        elif "```" in result_text:
+            result_text = result_text.split("```")[1].split("```")[0].strip()
+
+        # Estrai JSON
+        start = result_text.find("{")
+        end = result_text.rfind("}")
+        if start != -1 and end != -1:
+            result_text = result_text[start:end+1]
+
+        result = json.loads(result_text)
+        categories = result.get('categories', [])
+
+        # Valida e pulisci le categorie
+        valid_categories = []
+        for cat in categories:
+            if isinstance(cat, dict) and cat.get('name', '').strip():
+                valid_categories.append({
+                    'name': cat['name'].strip(),
+                    'description': cat.get('description', '').strip()
+                })
+
+        return valid_categories
+
+    except Exception as e:
+        st.warning(f"⚠️ Errore nella definizione categorie: {str(e)}. Uso categorie default.")
+        # Fallback: usa categorie custom o default
+        if custom_cats and len(custom_cats) > 0:
+            return [{'name': c['name'], 'description': c['description']} for c in custom_cats if c['name'].strip()]
+        return [
+            {'name': 'Generic', 'description': 'Broad searches with no specific intent'},
+            {'name': 'Buy / Compare', 'description': 'Shopping and comparison intent'},
+            {'name': 'Local', 'description': 'Location-based searches'},
+            {'name': 'How To', 'description': 'Tutorial and educational searches'}
+        ]
 
 
 def add_uncategorized_keywords(all_clusters, original_keywords):
@@ -541,12 +695,47 @@ def cluster_keywords_claude(keywords_list, api_key, batch_size, custom_cats, mod
         all_clusters = []
         total_batches = (len(keywords_list) + batch_size - 1) // batch_size
 
+        # =====================================================
+        # FASE 1: Analisi globale e definizione categorie
+        # =====================================================
+        st.info("🔍 **FASE 1**: Analisi globale delle keyword per definire le categorie ottimali...")
+
+        defined_categories = analyze_and_define_categories(
+            client=client,
+            all_keywords=keywords_list,
+            max_clusters=max_clusters,
+            output_language=output_language,
+            custom_cats=custom_cats,
+            mode=mode,
+            products_list=products_list,
+            macro_theme=macro_theme
+        )
+
+        if not defined_categories:
+            return None, "Impossibile definire le categorie. Riprova."
+
+        # Mostra le categorie definite
+        st.success(f"✅ **{len(defined_categories)} categorie definite** per il clustering:")
+        categories_preview = ", ".join([f"**{cat['name']}**" for cat in defined_categories])
+        st.markdown(f"📂 {categories_preview}")
+
+        # =====================================================
+        # FASE 2: Assegnazione keyword alle categorie fisse
+        # =====================================================
+        st.info(f"📦 **FASE 2**: Assegnazione keyword alle {len(defined_categories)} categorie definite...")
+
         if len(keywords_list) > batch_size:
-            st.info(f"📦 Elaborazione in {total_batches} batch da ~{batch_size} keywords...")
+            st.text(f"Elaborazione in {total_batches} batch da ~{batch_size} keywords...")
+
+        # Prepara testo categorie per i prompt
+        categories_text_for_prompt = "\n".join(
+            f"- **{cat['name']}**: {cat['description']}"
+            for cat in defined_categories
+        )
 
         # Prepare context sections
         context_section = ""
-        
+
         if products_list:
             products_text = "\n".join(f"- {p}" for p in products_list)
             context_section += f"""
@@ -572,68 +761,48 @@ Use this theme to better understand the overall context of the keyword research.
             if total_batches > 1:
                 st.text(f"📦 Batch {batch_idx + 1}/{total_batches}: keywords {start_idx+1}-{end_idx}")
 
-            # Costruisci testo categorie con descrizioni
-            if custom_cats and len(custom_cats) > 0:
-                categories_text = "\n".join(
-                    f"- **{cat['name']}**: {cat['description']}" 
-                    for cat in custom_cats 
-                    if cat['name'].strip()
-                )
-                
-                if mode == "Custom (tu definisci categorie)":
-                    extra_instruction = f"""STRICT CATEGORY LIMIT: You MUST use ONLY these {len(custom_cats)} predefined categories.
-You are allowed to create a MAXIMUM of {max_clusters} additional categories ONLY if a keyword absolutely cannot fit any predefined category.
-TOTAL categories (predefined + new) MUST NOT exceed {len(custom_cats) + max_clusters}.
-If unsure, assign to 'Generic' rather than creating new categories."""
-                else:
-                    extra_instruction = f"""STRICT CATEGORY LIMIT: Strongly prefer these {len(custom_cats)} predefined categories.
-Create additional categories ONLY if absolutely necessary, with a HARD MAXIMUM of {max_clusters} total categories.
-NEVER exceed {max_clusters} total categories - if you need more, consolidate similar keywords into existing categories.
-If unsure, assign to 'Generic' rather than creating new categories."""
+            # =====================================================
+            # FASE 2: Prompt per assegnazione a categorie FISSE
+            # =====================================================
+            # Le categorie sono già state definite nella FASE 1
+            # L'AI deve SOLO assegnare, NON creare nuove categorie
 
-                prompt = f"""You are an expert SEO keyword intent analyzer.
+            prompt = f"""You are an expert SEO keyword intent analyzer.
 
-CRITICAL LANGUAGE INSTRUCTION:
-- ALL category names MUST be in {output_language}
-- ALL category descriptions MUST be in {output_language}
-- Keywords remain in their original language
-- Your JSON output must have category names and descriptions in {output_language}
+CRITICAL TASK: Assign each keyword to ONE of the predefined categories below.
+
+⚠️ STRICT RULE: You MUST use ONLY these {len(defined_categories)} categories. Do NOT create new categories.
 
 {context_section}
 
-TASK: Categorize keywords by USER SEARCH INTENT (why they're searching), NOT by product type.
+PREDEFINED CATEGORIES (use EXACTLY these names):
+{categories_text_for_prompt}
 
-KEYWORDS ({len(batch_keywords)} - may be in any language):
+KEYWORDS TO CATEGORIZE ({len(batch_keywords)}):
 {chr(10).join(f"{i+1}. {kw}" for i, kw in enumerate(batch_keywords))}
 
-YOUR PREDEFINED CATEGORIES WITH DESCRIPTIONS:
-{categories_text}
-
-IMPORTANT: Use the category DESCRIPTIONS as your PRIMARY guide for assignment.
-Each description tells you EXACTLY what kind of keywords belong in that category.
-
-OUTPUT LANGUAGE REQUIREMENT:
-- Translate category names to {output_language}
-- Write descriptions in {output_language}
-- Keep keywords in original language
+ASSIGNMENT RULES:
+1. EVERY keyword MUST be assigned to exactly ONE category from the list above
+2. Use the category DESCRIPTION to decide where each keyword belongs
+3. Think: "WHY is the user searching this?" and match to the best fitting category
+4. If a keyword could fit multiple categories, choose the MOST SPECIFIC one
+5. Do NOT create new categories - use ONLY the {len(defined_categories)} categories listed above
+6. Use the EXACT category names as shown above (case-sensitive)
 
 BRAND DETECTION:
 - If keyword contains a recognizable brand name (Armani, Dior, MAC, Nike, Apple, Samsung, KIKO, etc.), extract it
 - Put brand name in "brand" field (capitalize properly)
-- Do NOT create "Brand Specific" categories
 
-RULES:
-- {extra_instruction}
-- EVERY keyword must be categorized (all {len(batch_keywords)})
-- Think: "WHY is the user searching this?" and match to category description
-- Keep your "description" field SHORT (max 10 words, in {output_language})
-- Category names and descriptions MUST be in {output_language}
+OUTPUT FORMAT:
+- Category names: Use EXACTLY as shown above (in {output_language})
+- Keywords: Keep in original language
+- Description: Brief (max 10 words, in {output_language})
 
 JSON FORMAT:
 {{
   "clusters": [
     {{
-      "cluster_name": "Category name in {output_language}",
+      "cluster_name": "EXACT category name from the list above",
       "keywords": [
         {{
           "keyword": "the keyword (original language)",
@@ -643,87 +812,9 @@ JSON FORMAT:
       "description": "Brief reason in {output_language} (max 10 words)"
     }}
   ]
-}}"""
-            else:
-                # AUTO mode - genera categorie
-                prompt = f"""You are an expert SEO keyword intent analyzer.
+}}
 
-CRITICAL LANGUAGE INSTRUCTION:
-- ALL category names MUST be in {output_language}
-- ALL category descriptions MUST be in {output_language}
-- Keywords remain in their original language
-- Your JSON output must have category names and descriptions in {output_language}
-
-{context_section}
-
-TASK: Categorize keywords by USER SEARCH INTENT (why they're searching), NOT by product type.
-
-KEYWORDS ({len(batch_keywords)} - may be in any language):
-{chr(10).join(f"{i+1}. {kw}" for i, kw in enumerate(batch_keywords))}
-
-INTENT CATEGORIZATION LOGIC (create categories with names in {output_language}):
-
-1. **Generic**: Vague, broad searches with NO specific intent signals
-   Examples: "armani lipstick", "nike shoes", "samsung phone", "rossetto", "zapatos"
-
-2. **Buy / Compare**: Contains comparison or shopping modifiers
-   Examples: "best base makeup for oily skin", "top 10 laptops", "migliori smartphone"
-   Words: best, top, vs, comparison, review, migliori, mejores, etc.
-
-3. **LOCAL**: Location-based searches
-   Examples: "shop near me", "kiko store milano", "where to buy mascara", "vicino a me"
-   Words: near me, shop, store, where to buy, negozio, tienda, vicino, etc.
-
-4. **HOW TO**: Tutorial/educational intent
-   Examples: "how to apply mascara", "makeup tutorial", "come applicare il trucco"
-   Words: how to, tutorial, guide, tips, come fare, tutorial, guida, etc.
-
-5. **Feature or Finish**: SPECIFIC attributes/characteristics
-   Examples: "waterproof mascara", "matte red lipstick", "mascara impermeabile"
-
-6. **Price Related**: Budget-focused
-   Examples: "cheap mascara", "luxury skincare", "economico", "barato"
-
-7. **Problem / Solution**: Addresses specific problem
-   Examples: "mascara that doesn't smudge", "laptop for gaming"
-
-OUTPUT LANGUAGE REQUIREMENT:
-- Create category names in {output_language}
-- Write descriptions in {output_language}
-- Keep keywords in original language
-
-BRAND DETECTION:
-- Extract recognizable brand names to "brand" field
-- Capitalize properly (Armani, Nike, Samsung, KIKO, etc.)
-- Do NOT create "Brand Specific" categories
-
-STRICT CATEGORY LIMIT: Create between 5 and {max_clusters} intent categories with names in {output_language}.
-⚠️ HARD LIMIT: You MUST NOT exceed {max_clusters} categories. This is a strict requirement.
-If you have more keyword types than {max_clusters}, consolidate similar intents into broader categories.
-
-RULES:
-- EVERY keyword must be categorized (all {len(batch_keywords)})
-- Think: "WHY is the user searching this?"
-- Focus on INTENT, not product type
-- Keep "description" field SHORT (max 10 words, in {output_language})
-- Category names MUST be in {output_language}
-- NEVER create more than {max_clusters} categories - consolidate if needed
-
-JSON FORMAT:
-{{
-  "clusters": [
-    {{
-      "cluster_name": "Intent Category Name in {output_language}",
-      "keywords": [
-        {{
-          "keyword": "the keyword (original language)",
-          "brand": "Brand Name or null"
-        }}
-      ],
-      "description": "Brief reason in {output_language} (max 10 words)"
-    }}
-  ]
-}}"""
+REMEMBER: Use ONLY the {len(defined_categories)} predefined categories. Every keyword must be assigned."""
 
             # Retry & call
             max_retries = 3
@@ -816,7 +907,8 @@ JSON FORMAT:
                 return None, f"JSON error: {str(e)}"
 
         # 1. Consolida cluster con lo stesso nome da batch diversi
-        consolidated_clusters, unique_categories_before = consolidate_clusters(all_clusters, max_clusters)
+        # Non passiamo più max_clusters perché le categorie sono già definite nella FASE 1
+        consolidated_clusters, unique_categories_count = consolidate_clusters(all_clusters)
 
         # 2. Aggiungi keyword non categorizzate
         final_clusters, uncategorized_kws = add_uncategorized_keywords(consolidated_clusters, keywords_list)
@@ -832,7 +924,7 @@ JSON FORMAT:
         if len(uncategorized_kws) > 0:
             st.warning(f"⚠️ {len(uncategorized_kws)} keyword non categorizzate - aggiunte alla categoria 'Non Categorizzate'")
 
-        st.info(f"📊 **Categorie uniche generate:** {unique_categories} (limite impostato: {max_clusters})")
+        st.success(f"✅ **Clustering completato:** {unique_categories} categorie, {total_categorized}/{len(keywords_list)} keyword categorizzate")
 
         def cname(c):
             return (c.get('cluster_name') or '').lower()
