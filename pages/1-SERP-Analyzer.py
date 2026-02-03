@@ -106,36 +106,42 @@ st.markdown("""
 def estrai_url_con_serpapi(query, num_results=100, lingua='it', geolocalizzazione='IT', api_key=''):
     """Estrae URL e metadati da Google usando SerpAPI"""
     results_data = []
-    risultati_per_pagina = 10
+    risultati_per_pagina = 100  # Massimo supportato da SerpAPI per ridurre chiamate API
     progress_bar = st.progress(0)
     status_text = st.empty()
-    
+
     total_pages = (num_results + risultati_per_pagina - 1) // risultati_per_pagina
-    
+
     session = requests.Session()
     session.headers.update({
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
     })
-    
-    for page_num in range(total_pages):
-        start = page_num * risultati_per_pagina
-        progress = (page_num + 1) / total_pages
+
+    start = 0
+    page_num = 0
+    has_more_pages = True
+    consecutive_empty = 0  # Contatore per pagine vuote consecutive
+
+    while len(results_data) < num_results and has_more_pages:
+        progress = min((len(results_data) + 1) / num_results, 0.95)
         progress_bar.progress(progress)
-        status_text.markdown(f"**🔄 Estrazione in corso... Pagina {page_num + 1}/{total_pages}**")
-        
+        status_text.markdown(f"**🔄 Estrazione in corso... {len(results_data)} risultati trovati (pagina {page_num + 1})**")
+
         params = {
             "engine": "google",
             "q": query,
             "hl": lingua,
             "gl": geolocalizzazione,
-            "num": risultati_per_pagina,
+            "num": min(risultati_per_pagina, num_results - len(results_data)),
             "start": start,
-            "api_key": api_key
+            "api_key": api_key,
+            "filter": 0,  # Disabilita filtro duplicati Google per ottenere più risultati
+            "nfpr": 0     # Non usare correzione automatica query
         }
-        
+
         try:
             response = session.get("https://serpapi.com/search", params=params, timeout=30)
-            
+
             if response.status_code != 200:
                 st.error(f"❌ Errore HTTP {response.status_code}")
                 try:
@@ -145,32 +151,54 @@ def estrai_url_con_serpapi(query, num_results=100, lingua='it', geolocalizzazion
                 except:
                     pass
                 break
-            
+
             data = response.json()
-            
+
             if 'error' in data:
                 st.error(f"❌ Errore API: {data['error']}")
                 break
-            
+
             risultati = data.get("organic_results", [])
-            
+
+            # Verifica se ci sono più pagine usando serpapi_pagination
+            pagination_info = data.get("serpapi_pagination", {})
+            next_page = pagination_info.get("next")
+
             if not risultati:
-                break
-            
-            for idx, result in enumerate(risultati, start=start+1):
+                consecutive_empty += 1
+                # Se abbiamo 2 pagine vuote consecutive, probabilmente non ci sono più risultati
+                if consecutive_empty >= 2:
+                    has_more_pages = False
+                    break
+                # Prova la pagina successiva
+                start += risultati_per_pagina
+                page_num += 1
+                time.sleep(0.5)
+                continue
+            else:
+                consecutive_empty = 0  # Reset contatore
+
+            for result in risultati:
+                if len(results_data) >= num_results:
+                    break
+
                 link = result.get("link", "")
                 title = result.get("title", "N/A")
                 snippet = result.get("snippet", "N/A")
-                
+
+                # Evita duplicati
+                if any(r['URL'] == link for r in results_data):
+                    continue
+
                 # Estrai dominio
                 try:
                     from urllib.parse import urlparse
                     domain = urlparse(link).netloc
                 except:
                     domain = "N/A"
-                
+
                 results_data.append({
-                    "Posizione": idx,
+                    "Posizione": len(results_data) + 1,
                     "URL": link,
                     "Title": title,
                     "Snippet": snippet,
@@ -178,20 +206,28 @@ def estrai_url_con_serpapi(query, num_results=100, lingua='it', geolocalizzazion
                     "Lunghezza Title": len(title),
                     "Lunghezza Snippet": len(snippet)
                 })
-            
-            if page_num < total_pages - 1 and len(results_data) < num_results:
-                time.sleep(1)
-            
-            if len(results_data) >= num_results:
-                break
-                
+
+            # Verifica se ci sono più pagine disponibili
+            if not next_page:
+                has_more_pages = False
+            else:
+                start += len(risultati)
+                page_num += 1
+                if len(results_data) < num_results:
+                    time.sleep(1)
+
         except Exception as e:
             st.error(f"❌ Errore: {str(e)}")
             break
-    
+
     progress_bar.progress(1.0)
-    status_text.success(f"✅ Estrazione completata! {len(results_data)} risultati trovati")
-    
+
+    # Messaggio informativo se abbiamo trovato meno risultati del richiesto
+    if len(results_data) < num_results:
+        status_text.warning(f"⚠️ Estrazione completata: {len(results_data)} risultati trovati (Google ha restituito meno risultati dei {num_results} richiesti)")
+    else:
+        status_text.success(f"✅ Estrazione completata! {len(results_data)} risultati trovati")
+
     return results_data[:num_results]
 
 def create_excel_export(df, query):
