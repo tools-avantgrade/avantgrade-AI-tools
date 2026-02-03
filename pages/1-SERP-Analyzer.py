@@ -118,10 +118,9 @@ def estrai_url_con_serpapi(query, num_results=100, lingua='it', geolocalizzazion
     })
 
     # Google restituisce max 10 risultati per pagina in modo affidabile
-    # Dobbiamo iterare su più pagine usando il parametro start
     start = 0
     page_num = 0
-    max_pages = 15  # Limite di sicurezza (150 risultati potenziali)
+    max_pages = 15
     no_new_results_count = 0
 
     while len(results_data) < num_results and page_num < max_pages:
@@ -129,16 +128,16 @@ def estrai_url_con_serpapi(query, num_results=100, lingua='it', geolocalizzazion
         progress_bar.progress(progress)
         status_text.markdown(f"**🔄 Estrazione pagina {page_num + 1}... {len(results_data)} risultati trovati**")
 
+        # Parametri standard per ricerca Google web
         params = {
             "engine": "google",
             "q": query,
             "hl": lingua,
             "gl": geolocalizzazione,
-            "num": 10,  # Google restituisce max 10 per pagina in modo affidabile
+            "google_domain": "google.it" if geolocalizzazione == "IT" else "google.com",
+            "num": 10,
             "start": start,
-            "api_key": api_key,
-            "filter": 0,  # IMPORTANTE: Disabilita filtro duplicati/simili di Google
-            "nfpr": 0     # Non usare correzione automatica query
+            "api_key": api_key
         }
 
         try:
@@ -182,9 +181,9 @@ def estrai_url_con_serpapi(query, num_results=100, lingua='it', geolocalizzazion
 
                 # Estrai dominio
                 try:
-                    domain = urlparse(link).netloc
+                    domain = urlparse(link).netloc.lower()
                 except:
-                    domain = "N/A"
+                    domain = ""
 
                 results_data.append({
                     "Posizione": len(results_data) + 1,
@@ -235,7 +234,7 @@ def estrai_url_con_serpapi(query, num_results=100, lingua='it', geolocalizzazion
 
     # Messaggio informativo
     if len(results_data) < num_results:
-        status_text.warning(f"⚠️ Estrazione completata: {len(results_data)} risultati trovati su {page_num + 1} pagine (Google ha restituito meno risultati dei {num_results} richiesti)")
+        status_text.warning(f"⚠️ Estrazione completata: {len(results_data)} risultati trovati su {page_num + 1} pagine")
     else:
         status_text.success(f"✅ Estrazione completata! {len(results_data)} risultati trovati")
 
