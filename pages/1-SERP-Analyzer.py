@@ -197,31 +197,29 @@ def estrai_url_con_serpapi(query, num_results=100, lingua='it', geolocalizzazion
                 })
                 new_results_this_page += 1
 
-            # Verifica se ci sono più pagine
-            pagination_info = data.get("serpapi_pagination", {})
-            has_next = pagination_info.get("next") is not None
-
-            # Se non abbiamo trovato nuovi risultati, incrementa il contatore
-            if new_results_this_page == 0:
+            # Se questa pagina non ha restituito risultati organici, potremmo essere alla fine
+            if not risultati or len(risultati) == 0:
                 no_new_results_count += 1
-                # Se 3 pagine consecutive senza nuovi risultati, fermati
-                if no_new_results_count >= 3:
+                # Se 2 pagine consecutive completamente vuote, fermati
+                if no_new_results_count >= 2:
                     break
             else:
-                no_new_results_count = 0
+                # Reset solo se abbiamo trovato NUOVI risultati (non duplicati)
+                if new_results_this_page > 0:
+                    no_new_results_count = 0
+                else:
+                    # Pagina con risultati ma tutti duplicati
+                    no_new_results_count += 1
+                    if no_new_results_count >= 3:
+                        break
 
-            # Se non ci sono più pagine secondo SerpAPI, fermati
-            if not has_next and not risultati:
-                break
-
-            # Passa alla pagina successiva
-            # IMPORTANTE: start deve incrementare di 10 (non del numero di risultati trovati)
+            # Passa alla pagina successiva - SEMPRE incrementa di 10
             start += 10
             page_num += 1
 
-            # Pausa tra le richieste per non sovraccaricare l'API
+            # Pausa tra le richieste
             if len(results_data) < num_results:
-                time.sleep(0.8)
+                time.sleep(0.5)
 
         except requests.exceptions.Timeout:
             st.warning(f"⚠️ Timeout alla pagina {page_num + 1}, continuo...")
