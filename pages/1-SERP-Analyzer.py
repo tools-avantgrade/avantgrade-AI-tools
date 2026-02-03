@@ -103,7 +103,7 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-def estrai_url_con_serpapi(query, num_results=100, lingua='it', geolocalizzazione='IT', api_key=''):
+def estrai_url_con_serpapi(query, num_results=100, lingua='it', geolocalizzazione='IT', api_key='', escludi_video=True):
     """Estrae URL e metadati da Google usando SerpAPI"""
     from urllib.parse import urlparse
 
@@ -111,6 +111,17 @@ def estrai_url_con_serpapi(query, num_results=100, lingua='it', geolocalizzazion
     seen_urls = set()  # Per evitare duplicati in modo efficiente
     progress_bar = st.progress(0)
     status_text = st.empty()
+
+    # Domini video da escludere se richiesto
+    video_domains = {
+        'youtube.com', 'www.youtube.com', 'm.youtube.com', 'youtu.be',
+        'vimeo.com', 'www.vimeo.com',
+        'dailymotion.com', 'www.dailymotion.com',
+        'tiktok.com', 'www.tiktok.com',
+        'twitch.tv', 'www.twitch.tv',
+        'facebook.com/watch', 'fb.watch',
+        'video.sky.it', 'video.repubblica.it', 'video.corriere.it'
+    }
 
     session = requests.Session()
     session.headers.update({
@@ -121,8 +132,9 @@ def estrai_url_con_serpapi(query, num_results=100, lingua='it', geolocalizzazion
     # Dobbiamo iterare su più pagine usando il parametro start
     start = 0
     page_num = 0
-    max_pages = 15  # Limite di sicurezza (150 risultati potenziali)
+    max_pages = 20  # Aumentato per compensare i video filtrati
     no_new_results_count = 0
+    skipped_videos = 0
 
     while len(results_data) < num_results and page_num < max_pages:
         progress = min(len(results_data) / num_results, 0.95)
@@ -176,15 +188,34 @@ def estrai_url_con_serpapi(query, num_results=100, lingua='it', geolocalizzazion
                 if not link or link in seen_urls:
                     continue
 
+                # Estrai dominio
+                try:
+                    domain = urlparse(link).netloc.lower()
+                except:
+                    domain = ""
+
+                # Salta video se richiesto
+                if escludi_video:
+                    is_video = False
+                    # Controlla se il dominio è un sito video
+                    for video_domain in video_domains:
+                        if video_domain in domain:
+                            is_video = True
+                            break
+                    # Controlla anche URL Instagram reel/video
+                    if 'instagram.com' in domain and ('/reel/' in link or '/tv/' in link or '/video/' in link):
+                        is_video = True
+                    # Controlla URL con /video/ nel path
+                    if '/video/' in link.lower() or '/videos/' in link.lower():
+                        is_video = True
+
+                    if is_video:
+                        skipped_videos += 1
+                        continue
+
                 seen_urls.add(link)
                 title = result.get("title", "N/A")
                 snippet = result.get("snippet", "N/A")
-
-                # Estrai dominio
-                try:
-                    domain = urlparse(link).netloc
-                except:
-                    domain = "N/A"
 
                 results_data.append({
                     "Posizione": len(results_data) + 1,
@@ -234,10 +265,11 @@ def estrai_url_con_serpapi(query, num_results=100, lingua='it', geolocalizzazion
     progress_bar.progress(1.0)
 
     # Messaggio informativo
+    video_msg = f" ({skipped_videos} video esclusi)" if escludi_video and skipped_videos > 0 else ""
     if len(results_data) < num_results:
-        status_text.warning(f"⚠️ Estrazione completata: {len(results_data)} risultati trovati su {page_num + 1} pagine (Google ha restituito meno risultati dei {num_results} richiesti)")
+        status_text.warning(f"⚠️ Estrazione completata: {len(results_data)} risultati trovati su {page_num + 1} pagine{video_msg}")
     else:
-        status_text.success(f"✅ Estrazione completata! {len(results_data)} risultati trovati")
+        status_text.success(f"✅ Estrazione completata! {len(results_data)} risultati trovati{video_msg}")
 
     return results_data[:num_results]
 
@@ -397,6 +429,9 @@ with col3:
 with col4:
     api_key = st.text_input("🔑 API Key", value="", type="password", placeholder="Inserisci la tua API key")
 
+# Opzioni avanzate
+escludi_video = st.checkbox("🎬 Escludi risultati video (YouTube, Vimeo, Instagram Reels, ecc.)", value=True)
+
 st.markdown("<br>", unsafe_allow_html=True)
 
 if st.button("🚀 ANALIZZA SERP", use_container_width=True):
@@ -407,7 +442,7 @@ if st.button("🚀 ANALIZZA SERP", use_container_width=True):
     else:
         paese_info = paesi[paese_sel]
         with st.spinner("Estrazione e analisi in corso..."):
-            results = estrai_url_con_serpapi(query, num_results, paese_info['lang'], paese_info['code'], api_key)
+            results = estrai_url_con_serpapi(query, num_results, paese_info['lang'], paese_info['code'], api_key, escludi_video)
         
         if results:
             st.session_state['results'] = results
