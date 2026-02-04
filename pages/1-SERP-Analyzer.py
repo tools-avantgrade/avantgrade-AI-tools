@@ -5,9 +5,11 @@ import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 from io import BytesIO
-from urllib.parse import urlparse, urlunparse, parse_qsl, urlencode
+from urllib.parse import urlparse, urlunparse
 
-# Configurazione pagina
+# -----------------------------
+# Config pagina + CSS
+# -----------------------------
 st.set_page_config(
     page_title="SERP Analyzer Pro - Avantgrade",
     page_icon="🔍",
@@ -15,7 +17,6 @@ st.set_page_config(
     initial_sidebar_state="collapsed"
 )
 
-# CSS Dark Theme
 st.markdown("""
     <style>
     .stApp { background: linear-gradient(180deg, #000000 0%, #1a0a00 100%); }
@@ -46,9 +47,7 @@ st.markdown("""
     .metric-card { background: #1a1a1a; border: 2px solid #FF6B35; border-radius: 12px; padding: 1.5rem; margin: 0.5rem 0; }
     div[data-testid="stExpander"] { background-color: #1a1a1a; border: 1px solid #FF6B35; border-radius: 10px; }
     .stTabs [data-baseweb="tab-list"] { gap: 10px; }
-    .stTabs [data-baseweb="tab"] {
-        background-color: #1a1a1a; color: #FF6B35; border-radius: 8px 8px 0 0; padding: 10px 20px;
-    }
+    .stTabs [data-baseweb="tab"] { background-color: #1a1a1a; color: #FF6B35; border-radius: 8px 8px 0 0; padding: 10px 20px; }
     .stTabs [aria-selected="true"] { background: linear-gradient(135deg, #FF6B35 0%, #F7931E 100%); color: white; }
     [data-testid="stTextArea"] textarea { background-color: #1a1a1a !important; color: #ffffff !important; border: 1px solid #FF6B35 !important; }
     </style>
@@ -57,65 +56,51 @@ st.markdown("""
 # -----------------------------
 # Helpers
 # -----------------------------
-
-def normalize_url(u: str) -> str:
-    """
-    Normalizza URL per deduplica:
-    - rimuove fragment (#...)
-    - ordina querystring
-    - rimuove parametri di tracking comuni
-    """
-    if not u:
-        return ""
-    try:
-        p = urlparse(u)
-        # Filtra parametri tracking comuni
-        tracking_prefixes = ("utm_",)
-        tracking_keys = {"gclid", "fbclid", "msclkid", "igshid"}
-        qs = []
-        for k, v in parse_qsl(p.query, keep_blank_values=True):
-            kl = k.lower()
-            if any(kl.startswith(tp) for tp in tracking_prefixes):
-                continue
-            if kl in tracking_keys:
-                continue
-            qs.append((k, v))
-        qs_sorted = urlencode(sorted(qs), doseq=True)
-        p2 = p._replace(query=qs_sorted, fragment="")
-        return urlunparse(p2)
-    except:
-        return u.strip()
-
-def serpapi_request(session: requests.Session, params: dict) -> dict:
-    r = session.get("https://serpapi.com/search.json", params=params, timeout=45)
-    # SerpAPI usa JSON; se c'è errore, spesso ritorna {"error": "..."}
-    if r.status_code != 200:
-        raise RuntimeError(f"HTTP {r.status_code}: {r.text[:200]}")
-    data = r.json()
-    if "error" in data:
-        raise RuntimeError(f"SerpAPI error: {data['error']}")
-    return data
-
-def extract_organic_rows(data: dict):
-    # Alcune SERP hanno meno di 10 organici per pagina (per via di feature SERP)
-    return data.get("organic_results", []) or []
-
 def extract_domain(link: str) -> str:
     try:
         return urlparse(link).netloc.lower()
     except:
         return ""
 
-# -----------------------------
-# SERP extraction (robusta)
-# -----------------------------
+def soft_normalize_for_dedup(u: str) -> str:
+    """
+    Deduplica SOFT:
+    - rimuove solo il fragment (#...)
+    - lascia querystring (perché su Google spesso cambiano e tu vuoi "come SERP")
+    """
+    if not u:
+        return ""
+    try:
+        p = urlparse(u)
+        return urlunparse(p._replace(fragment=""))
+    except:
+        return u.strip()
 
-def estrai_url_con_serpapi(query, num_results=100, lingua='it', geolocalizzazione='IT', api_key=''):
-    """
-    Strategia:
-    1) Prova 1 chiamata con num=min(100, num_results) e start=0 (molto più stabile)
-    2) Se non basta, pagina con start += 10 finché arrivi a num_results o max_pages
-    """
+def serpapi_request(session: requests.Session, params: dict) -> dict:
+    r = session.get("https://serpapi.com/search.json", params=params, timeout=45)
+    if r.status_code != 200:
+        raise RuntimeError(f"HTTP {r.status_code}: {r.text[:250]}")
+    data = r.json()
+    if "error" in data:
+        raise RuntimeError(f"SerpAPI error: {data['error']}")
+    return data
+
+# -----------------------------
+# SERP extraction - 10 risultati per pagina
+# -----------------------------
+def estrai_serp_10_per_pagina(
+    query: str,
+    num_results: int,
+    api_key: str,
+    google_domain: str,
+    hl: str,
+    gl: str,
+    location: str,
+    device: str,
+    dedup: bool,
+    pause_seconds: float = 0.35,
+    max_pages: int = 20
+):
     results_data = []
     seen = set()
 
@@ -123,128 +108,95 @@ def estrai_url_con_serpapi(query, num_results=100, lingua='it', geolocalizzazion
     status_text = st.empty()
 
     session = requests.Session()
-    session.headers.update({
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-    })
+    session.headers.update({"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"})
 
-    google_domain = "google.it" if geolocalizzazione == "IT" else "google.com"
+    start = 0
+    page = 1
+    empty_pages = 0
 
-    def add_results(organic):
-        added = 0
+    while len(results_data) < num_results and page <= max_pages:
+        progress = min(len(results_data) / num_results, 0.95)
+        progress_bar.progress(progress)
+        status_text.markdown(f"**🔄 Pagina {page} (start={start}) — {len(results_data)}/{num_results}**")
+
+        params = {
+            "engine": "google",
+            "q": query,
+            "google_domain": google_domain,
+            "hl": hl,
+            "gl": gl,
+            "location": location,     # IMPORTANTISSIMO: come nel tuo esempio
+            "device": device,         # desktop/mobile
+            "num": 10,
+            "start": start,
+            "api_key": api_key
+        }
+
+        data = serpapi_request(session, params)
+        organic = data.get("organic_results", []) or []
+
+        # Debug utile per capire se SerpAPI ti sta dando pochi organici
+        st.caption(f"Pagina {page}: organic_results = {len(organic)}")
+
+        if not organic:
+            empty_pages += 1
+            if empty_pages >= 2:
+                break
+            start += 10
+            page += 1
+            time.sleep(pause_seconds)
+            continue
+
+        empty_pages = 0
+
         for r in organic:
             if len(results_data) >= num_results:
                 break
+
             link = r.get("link", "") or ""
-            link_norm = normalize_url(link)
-            if not link_norm or link_norm in seen:
+            if not link:
                 continue
-            seen.add(link_norm)
+
+            key = soft_normalize_for_dedup(link) if dedup else f"{len(results_data)}::{link}"
+            if dedup and key in seen:
+                continue
+            if dedup:
+                seen.add(key)
 
             title = r.get("title", "N/A") or "N/A"
             snippet = r.get("snippet", "N/A") or "N/A"
 
             results_data.append({
                 "Posizione": len(results_data) + 1,
-                "URL": link_norm,
+                "URL": link,  # qui NON normalizziamo: come SERP
                 "Title": title,
                 "Snippet": snippet,
-                "Dominio": extract_domain(link_norm),
+                "Dominio": extract_domain(link),
                 "Lunghezza Title": len(title),
-                "Lunghezza Snippet": len(snippet)
+                "Lunghezza Snippet": len(snippet),
             })
-            added += 1
-        return added
 
-    # --- STEP 1: One-shot (num=100)
-    try:
-        status_text.markdown("**🚀 Tentativo 1: richiesta unica fino a 100 risultati...**")
-        params = {
-            "engine": "google",
-            "q": query,
-            "hl": lingua,
-            "gl": geolocalizzazione,
-            "google_domain": google_domain,
-            "num": min(100, num_results),  # qui la chiave!
-            "start": 0,
-            "api_key": api_key
-        }
-        data = serpapi_request(session, params)
-        organic = extract_organic_rows(data)
-        add_results(organic)
-
-        progress_bar.progress(min(len(results_data) / num_results, 0.65))
-
-    except Exception as e:
-        st.warning(f"⚠️ One-shot fallito o parziale: {str(e)}. Passo alla paginazione...")
-
-    # --- STEP 2: Pagination fallback (start=10,20,...)
-    # Non stoppiamo aggressivamente: alcune query hanno pagine con pochi organici.
-    start = 10
-    page_num = 2
-    max_pages = max(12, (num_results // 10) + 8)  # margine extra
-
-    while len(results_data) < num_results and page_num <= max_pages:
-        progress = min(0.65 + (len(results_data) / num_results) * 0.35, 0.95)
-        progress_bar.progress(progress)
-        status_text.markdown(f"**🔄 Paginazione: pagina {page_num} (start={start}) — {len(results_data)} / {num_results}**")
-
-        params = {
-            "engine": "google",
-            "q": query,
-            "hl": lingua,
-            "gl": geolocalizzazione,
-            "google_domain": google_domain,
-            "num": 10,
-            "start": start,
-            "api_key": api_key
-        }
-
-        try:
-            data = serpapi_request(session, params)
-            organic = extract_organic_rows(data)
-
-            # Se proprio non arriva nulla, incrementa e continua qualche volta
-            if not organic:
-                start += 10
-                page_num += 1
-                time.sleep(0.4)
-                continue
-
-            # Aggiungi e vai avanti comunque (anche se pochi)
-            add_results(organic)
-
-            start += 10
-            page_num += 1
-            time.sleep(0.4)
-
-        except requests.exceptions.Timeout:
-            st.warning(f"⚠️ Timeout pagina {page_num} (start={start}). Continuo...")
-            start += 10
-            page_num += 1
-            time.sleep(0.8)
-            continue
-        except Exception as e:
-            st.error(f"❌ Errore SerpAPI: {str(e)}")
-            break
+        start += 10
+        page += 1
+        time.sleep(pause_seconds)
 
     progress_bar.progress(1.0)
 
     if len(results_data) < num_results:
-        status_text.warning(f"⚠️ Completato: {len(results_data)} risultati unici trovati (richiesti {num_results}).")
+        status_text.warning(f"⚠️ Completato: {len(results_data)} risultati estratti (richiesti {num_results}).")
         st.info(
-            "Nota: in alcune SERP Google/SerpAPI possono fornire meno risultati organici unici "
-            "per via di clustering, risultati ripetuti o feature SERP. "
-            "Questo codice comunque prova one-shot + paginazione con margine extra."
+            "Se Google mostra più risultati di quelli che ricevi via API, spesso è perché SerpAPI (o Google) "
+            "sta ritornando meno risultati organici per pagina (feature SERP, clustering, ecc.). "
+            "Guarda il contatore 'organic_results' per pagina qui sopra."
         )
     else:
-        status_text.success(f"✅ Estrazione completata! {len(results_data)} risultati trovati")
+        status_text.success(f"✅ Estrazione completata! {len(results_data)} risultati")
 
     return results_data[:num_results]
 
 # -----------------------------
 # Export & Charts
 # -----------------------------
-
 def create_excel_export(df, query):
     output = BytesIO()
     with pd.ExcelWriter(output, engine='openpyxl') as writer:
@@ -284,7 +236,6 @@ def create_position_chart(df):
         marker=dict(
             size=10,
             color=df['Posizione'],
-            colorscale=[[0, '#FF6B35'], [1, '#F7931E']],
             showscale=True,
             colorbar=dict(title="Posizione")
         ),
@@ -311,29 +262,13 @@ def create_domain_chart(df):
         labels={'x': 'Numero di Risultati', 'y': 'Dominio'},
         title="Top 10 Domini nella SERP"
     )
-    fig.update_traces(marker_color='#FF6B35')
-    fig.update_layout(
-        template="plotly_dark",
-        plot_bgcolor='#000000',
-        paper_bgcolor='#000000',
-        font=dict(color='#ffffff')
-    )
+    fig.update_layout(template="plotly_dark", plot_bgcolor='#000000', paper_bgcolor='#000000', font=dict(color='#ffffff'))
     return fig
 
 def create_length_distribution(df):
     fig = go.Figure()
-    fig.add_trace(go.Histogram(
-        x=df['Lunghezza Title'],
-        name='Title',
-        marker_color='#FF6B35',
-        opacity=0.7
-    ))
-    fig.add_trace(go.Histogram(
-        x=df['Lunghezza Snippet'],
-        name='Snippet',
-        marker_color='#F7931E',
-        opacity=0.7
-    ))
+    fig.add_trace(go.Histogram(x=df['Lunghezza Title'], name='Title', opacity=0.7))
+    fig.add_trace(go.Histogram(x=df['Lunghezza Snippet'], name='Snippet', opacity=0.7))
     fig.update_layout(
         title="Distribuzione Lunghezze Title e Snippet",
         xaxis_title="Lunghezza (caratteri)",
@@ -349,40 +284,43 @@ def create_length_distribution(df):
 # -----------------------------
 # UI
 # -----------------------------
-
 st.markdown("""
 <div style='background: linear-gradient(135deg, #FF6B35 0%, #F7931E 100%); 
             padding: 2rem; border-radius: 15px; text-align: center; 
             box-shadow: 0 8px 16px rgba(255, 107, 53, 0.3); margin-bottom: 2rem;'>
-    <h1 style='margin: 0; font-size: 2.5em; text-shadow: 2px 2px 4px rgba(0,0,0,0.3); color: white !important;'>
+    <h1 style='margin: 0; font-size: 2.5em; color: white !important;'>
         🔍 SERP Analyzer PRO
     </h1>
     <p style='margin: 10px 0 0 0; font-size: 1.2em; opacity: 0.95; color: white !important;'>
-        Analisi Avanzata SERP con Grafici e Export Excel
+        Estrazione SERP (10 risultati per pagina) + Export
     </p>
 </div>
 """, unsafe_allow_html=True)
-
-paesi = {
-    "Italia 🇮🇹": {"code": "IT", "lang": "it"},
-    "Spagna 🇪🇸": {"code": "ES", "lang": "es"},
-    "Francia 🇫🇷": {"code": "FR", "lang": "fr"},
-    "UK 🇬🇧": {"code": "GB", "lang": "en"},
-    "Germania 🇩🇪": {"code": "DE", "lang": "de"},
-    "USA 🇺🇸": {"code": "US", "lang": "en"}
-}
 
 col1, col2 = st.columns([3, 1])
 with col1:
     query = st.text_input("🔎 Query di ricerca", placeholder="es. gian luca rana")
 with col2:
-    num_results = st.selectbox("📊 Risultati", [10, 20, 30, 40, 50, 60, 70, 80, 90, 100])
+    num_results = st.selectbox("📊 Risultati", [10,20,30,40,50,60,70,80,90,100], index=9)
 
-col3, col4 = st.columns(2)
+# Parametri in stile SerpAPI (come nel tuo esempio)
+col3, col4, col5 = st.columns(3)
 with col3:
-    paese_sel = st.selectbox("🌍 Paese", list(paesi.keys()))
+    google_domain = st.selectbox("🌐 Google domain", ["google.it", "google.com"], index=0)
 with col4:
-    api_key = st.text_input("🔑 API Key", value="", type="password", placeholder="Inserisci la tua API key")
+    device = st.selectbox("📱 Device", ["desktop", "mobile"], index=0)
+with col5:
+    dedup = st.checkbox("🧹 Deduplica URL (soft)", value=True)
+
+col6, col7, col8 = st.columns(3)
+with col6:
+    hl = st.selectbox("🗣️ hl (lingua)", ["it", "en", "fr", "de", "es"], index=0)
+with col7:
+    gl = st.selectbox("🧭 gl (paese)", ["it", "us", "gb", "de", "fr", "es"], index=0)
+with col8:
+    location = st.text_input("📍 location (SerpAPI)", value="Italy", help="Usa location SerpAPI esatta, es: Italy, United States, Zurich, Milan, Rome...")
+
+api_key = st.text_input("🔑 API Key SerpAPI", value="", type="password", placeholder="Inserisci la tua API key")
 
 st.markdown("<br>", unsafe_allow_html=True)
 
@@ -392,22 +330,22 @@ if st.button("🚀 ANALIZZA SERP", use_container_width=True):
     elif not api_key.strip():
         st.error("⚠️ Inserisci la tua API key SerpAPI!")
     else:
-        paese_info = paesi[paese_sel]
-        with st.spinner("Estrazione e analisi in corso..."):
-            results = estrai_url_con_serpapi(
+        with st.spinner("Estrazione SERP in corso..."):
+            results = estrai_serp_10_per_pagina(
                 query=query.strip(),
                 num_results=num_results,
-                lingua=paese_info['lang'],
-                geolocalizzazione=paese_info['code'],
-                api_key=api_key.strip()
+                api_key=api_key.strip(),
+                google_domain=google_domain,
+                hl=hl,
+                gl=gl,
+                location=location.strip(),
+                device=device,
+                dedup=dedup
             )
 
         if results:
             st.session_state['results'] = results
-            st.session_state['query'] = query
-            st.session_state['paese'] = paese_info['code']
-        else:
-            st.warning("⚠️ Nessun risultato trovato (o errore in risposta).")
+            st.session_state['query'] = query.strip()
 
 # Risultati
 if 'results' in st.session_state and st.session_state['results']:
@@ -432,50 +370,19 @@ if 'results' in st.session_state and st.session_state['results']:
     with tab1:
         st.markdown("### 🎯 Risultati SERP Completi")
         all_urls = "\n".join(df['URL'].tolist())
-
         st.info(f"📊 **{len(df)} URL estratti** dalla query: *{st.session_state['query']}*")
 
         col_copy1, col_copy2 = st.columns(2)
-
         with col_copy1:
-            st.text_area(
-                "📋 Seleziona e Copia (Ctrl+A → Ctrl+C)",
-                all_urls,
-                height=150
-            )
-
+            st.text_area("📋 Seleziona e Copia (Ctrl+A → Ctrl+C)", all_urls, height=150)
         with col_copy2:
             st.markdown("### 💾 Oppure Scarica")
-
-            st.download_button(
-                "📥 Scarica TXT",
-                all_urls,
-                f"urls_{st.session_state['query'].replace(' ', '_')}.txt",
-                "text/plain",
-                use_container_width=True
-            )
-
+            st.download_button("📥 Scarica TXT", all_urls, f"urls_{st.session_state['query'].replace(' ', '_')}.txt", "text/plain", use_container_width=True)
             urls_csv = "URL\n" + "\n".join(df['URL'].tolist())
-            st.download_button(
-                "📊 Scarica CSV",
-                urls_csv,
-                f"urls_{st.session_state['query'].replace(' ', '_')}.csv",
-                "text/csv",
-                use_container_width=True
-            )
-
-            st.markdown("""
-            <div style='background: #1a1a1a; padding: 1rem; border-radius: 8px; 
-                        border-left: 4px solid #00cc66; margin-top: 1rem;'>
-                <small style='color: #00cc66;'>
-                    💡 <strong>Tip:</strong> Usa Ctrl+A per selezionare tutto, poi Ctrl+C per copiare!
-                </small>
-            </div>
-            """, unsafe_allow_html=True)
+            st.download_button("📊 Scarica CSV", urls_csv, f"urls_{st.session_state['query'].replace(' ', '_')}.csv", "text/csv", use_container_width=True)
 
         st.markdown("---")
         st.markdown("### 📋 Dettaglio Risultati")
-
         for _, row in df.iterrows():
             st.markdown(f"""
             <div class='url-box'>
@@ -490,7 +397,6 @@ if 'results' in st.session_state and st.session_state['results']:
     with tab2:
         st.markdown("### 📊 Visualizzazioni Grafiche")
         st.plotly_chart(create_position_chart(df), use_container_width=True)
-
         col_g1, col_g2 = st.columns(2)
         with col_g1:
             st.plotly_chart(create_domain_chart(df), use_container_width=True)
@@ -499,31 +405,14 @@ if 'results' in st.session_state and st.session_state['results']:
 
     with tab3:
         st.markdown("### 🎯 Analisi Dettagliata")
-
         col_a1, col_a2 = st.columns(2)
-
         with col_a1:
-            st.markdown("""
-            <div class='metric-card'>
-                <h3 style='color: #FF6B35;'>📏 Lunghezze Medie</h3>
-            </div>
-            """, unsafe_allow_html=True)
             st.metric("Title medio", f"{df['Lunghezza Title'].mean():.1f} caratteri")
             st.metric("Snippet medio", f"{df['Lunghezza Snippet'].mean():.1f} caratteri")
-            st.metric("Title più lungo", f"{df['Lunghezza Title'].max()} caratteri")
-            st.metric("Title più corto", f"{df['Lunghezza Title'].min()} caratteri")
-
         with col_a2:
-            st.markdown("""
-            <div class='metric-card'>
-                <h3 style='color: #FF6B35;'>🌐 Analisi Domini</h3>
-            </div>
-            """, unsafe_allow_html=True)
             st.metric("Domini unici", df['Dominio'].nunique())
             st.metric("Dominio più presente", df['Dominio'].mode()[0] if not df['Dominio'].mode().empty else "N/A")
-            st.metric("Max occorrenze stesso dominio", df['Dominio'].value_counts().max())
 
-        st.markdown("<br>", unsafe_allow_html=True)
         st.markdown("### 🏆 Top 10 Domini")
         domain_table = df['Dominio'].value_counts().head(10).reset_index()
         domain_table.columns = ['Dominio', 'Occorrenze']
@@ -531,55 +420,21 @@ if 'results' in st.session_state and st.session_state['results']:
 
     with tab4:
         st.markdown("### 📥 Esporta i Risultati")
-
         col_d1, col_d2, col_d3 = st.columns(3)
-
         with col_d1:
             csv = df.to_csv(index=False).encode('utf-8')
-            st.download_button(
-                "📥 Scarica CSV",
-                csv,
-                f"serp_analysis_{st.session_state['query'].replace(' ', '_')}.csv",
-                "text/csv",
-                use_container_width=True
-            )
-
+            st.download_button("📥 Scarica CSV", csv, f"serp_{st.session_state['query'].replace(' ', '_')}.csv", "text/csv", use_container_width=True)
         with col_d2:
             excel_file = create_excel_export(df, st.session_state['query'])
-            st.download_button(
-                "📊 Scarica Excel Avanzato",
-                excel_file,
-                f"serp_analysis_{st.session_state['query'].replace(' ', '_')}.xlsx",
-                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                use_container_width=True
-            )
-
+            st.download_button("📊 Scarica Excel", excel_file, f"serp_{st.session_state['query'].replace(' ', '_')}.xlsx",
+                               "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", use_container_width=True)
         with col_d3:
-            txt = "\n\n".join([f"#{row['Posizione']} - {row['Title']}\n{row['URL']}\n{row['Snippet']}" for _, row in df.iterrows()])
-            st.download_button(
-                "📝 Scarica TXT",
-                txt,
-                f"serp_analysis_{st.session_state['query'].replace(' ', '_')}.txt",
-                "text/plain",
-                use_container_width=True
-            )
+            txt = "\n\n".join([f"#{r['Posizione']} - {r['Title']}\n{r['URL']}\n{r['Snippet']}" for r in st.session_state['results']])
+            st.download_button("📝 Scarica TXT", txt, f"serp_{st.session_state['query'].replace(' ', '_')}.txt", "text/plain", use_container_width=True)
 
     with tab5:
-        st.markdown("### 📊 Tabella Dati Completa")
+        st.markdown("### 📝 Raw Data")
         st.dataframe(df, use_container_width=True, height=500)
-
-# Footer
-st.markdown("<br><br>", unsafe_allow_html=True)
-with st.expander("ℹ️ Come ottenere una API Key gratuita di SerpAPI"):
-    st.markdown("""
-    **Passaggi per ottenere la tua API key:**
-    1. Vai su https://serpapi.com/
-    2. Clicca su "Register"
-    3. Completa la registrazione
-    4. Nel Dashboard trovi la tua API key
-
-    **Piano gratuito:** tipicamente 100 ricerche/mese (può variare in base al piano attivo).
-    """)
 
 st.markdown("---")
 st.markdown("<p style='text-align: center; color: #999;'>🔍 SERP Analyzer PRO - Powered by Avantgrade Tools</p>", unsafe_allow_html=True)
