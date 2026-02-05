@@ -103,7 +103,7 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-def estrai_url_con_serpapi(query, num_results=100, lingua='it', geolocalizzazione='IT', api_key=''):
+def estrai_url_con_serpapi(query, num_results=100, lingua='it', geolocalizzazione='IT', api_key='', google_domain='google.com'):
     """Estrae URL e metadati da Google usando SerpAPI"""
     from urllib.parse import urlparse
 
@@ -134,7 +134,7 @@ def estrai_url_con_serpapi(query, num_results=100, lingua='it', geolocalizzazion
             "q": query,
             "hl": lingua,
             "gl": geolocalizzazione,
-            "google_domain": "google.it" if geolocalizzazione == "IT" else "google.com",
+            "google_domain": google_domain,
             "num": 10,
             "start": start,
             "api_key": api_key
@@ -373,14 +373,14 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 
-# Paesi
+# Paesi con domini Google corretti
 paesi = {
-    "Italia 🇮🇹": {"code": "IT", "lang": "it"},
-    "Spagna 🇪🇸": {"code": "ES", "lang": "es"},
-    "Francia 🇫🇷": {"code": "FR", "lang": "fr"},
-    "UK 🇬🇧": {"code": "GB", "lang": "en"},
-    "Germania 🇩🇪": {"code": "DE", "lang": "de"},
-    "USA 🇺🇸": {"code": "US", "lang": "en"}
+    "Italia 🇮🇹": {"code": "IT", "lang": "it", "domain": "google.it"},
+    "Spagna 🇪🇸": {"code": "ES", "lang": "es", "domain": "google.es"},
+    "Francia 🇫🇷": {"code": "FR", "lang": "fr", "domain": "google.fr"},
+    "UK 🇬🇧": {"code": "GB", "lang": "en", "domain": "google.co.uk"},
+    "Germania 🇩🇪": {"code": "DE", "lang": "de", "domain": "google.de"},
+    "USA 🇺🇸": {"code": "US", "lang": "en", "domain": "google.com"}
 }
 
 # Form
@@ -406,7 +406,7 @@ if st.button("🚀 ANALIZZA SERP", use_container_width=True):
     else:
         paese_info = paesi[paese_sel]
         with st.spinner("Estrazione e analisi in corso..."):
-            results = estrai_url_con_serpapi(query, num_results, paese_info['lang'], paese_info['code'], api_key)
+            results = estrai_url_con_serpapi(query, num_results, paese_info['lang'], paese_info['code'], api_key, paese_info['domain'])
         
         if results:
             st.session_state['results'] = results
