@@ -8,8 +8,9 @@ import plotly.graph_objects as go
 from io import BytesIO
 import base64
 
+
 # ----------------------------
-# PAGE CONFIG + CSS (tuo)
+# PAGE CONFIG + CSS
 # ----------------------------
 st.set_page_config(
     page_title="SERP Analyzer Pro - Avantgrade",
@@ -73,19 +74,56 @@ st.markdown("""
 # DATAFORSEO HELPERS
 # ----------------------------
 PAESI = {
-    "Italia 🇮🇹": {"gl": "it", "hl": "it", "location_code": 2380, "language_code": "it", "se_domain": "google.it"},
-    "Spagna 🇪🇸": {"gl": "es", "hl": "es", "location_code": 2724, "language_code": "es", "se_domain": "google.es"},
-    "Francia 🇫🇷": {"gl": "fr", "hl": "fr", "location_code": 2250, "language_code": "fr", "se_domain": "google.fr"},
-    "UK 🇬🇧": {"gl": "uk", "hl": "en", "location_code": 2826, "language_code": "en", "se_domain": "google.co.uk"},
+    "Italia 🇮🇹":   {"gl": "it", "hl": "it", "location_code": 2380, "language_code": "it", "se_domain": "google.it"},
+    "Spagna 🇪🇸":   {"gl": "es", "hl": "es", "location_code": 2724, "language_code": "es", "se_domain": "google.es"},
+    "Francia 🇫🇷":  {"gl": "fr", "hl": "fr", "location_code": 2250, "language_code": "fr", "se_domain": "google.fr"},
+    # FIX IMPORTANTE: gl per UK è "gb" (non "uk")
+    "UK 🇬🇧":       {"gl": "gb", "hl": "en", "location_code": 2826, "language_code": "en", "se_domain": "google.co.uk"},
     "Germania 🇩🇪": {"gl": "de", "hl": "de", "location_code": 2276, "language_code": "de", "se_domain": "google.de"},
-    "USA 🇺🇸": {"gl": "us", "hl": "en", "location_code": 2840, "language_code": "en", "se_domain": "google.com"},
+    "USA 🇺🇸":      {"gl": "us", "hl": "en", "location_code": 2840, "language_code": "en", "se_domain": "google.com"},
 }
 
 def _basic_auth_header(login: str, password: str) -> str:
     token = base64.b64encode(f"{login}:{password}".encode("utf-8")).decode("utf-8")
     return f"Basic {token}"
 
-def fetch_google_organic_100_dataforseo(
+def _call_dataforseo(session: requests.Session, endpoint: str, payload: list, timeout_s: int = 60):
+    r = session.post(endpoint, json=payload, timeout=timeout_s)
+    return r, (r.json() if r.headers.get("Content-Type", "").startswith("application/json") else None)
+
+def _extract_items(data: dict):
+    """Estrae items in modo robusto anche quando result/task mancano o sono vuoti."""
+    if not isinstance(data, dict):
+        return [], "Response non-JSON o vuota"
+
+    if data.get("status_code") != 20000:
+        return [], f"DataForSEO status_code={data.get('status_code')} msg={data.get('status_message')}"
+
+    tasks = data.get("tasks") or []
+    if not tasks:
+        return [], "tasks assente/vuoto"
+
+    task0 = tasks[0] or {}
+    result = task0.get("result") or []
+    if not result:
+        return [], "task.result assente/vuoto"
+
+    res0 = result[0] or {}
+    items = res0.get("items") or []
+    return items, None
+
+def _is_organic(item: dict) -> bool:
+    """Filtro organic più tollerante."""
+    t = (item.get("type") or "").lower()
+    if t == "organic":
+        return True
+    # alcuni formati possono avere type diverso ma "rank_group" e "url" presenti:
+    if "url" in item and item.get("rank_group") and t in {"search_result", "unknown"}:
+        # non perfetto ma utile come fallback
+        return True
+    return False
+
+def fetch_google_organic_dataforseo(
     keyword: str,
     login: str,
     password: str,
@@ -96,13 +134,17 @@ def fetch_google_organic_100_dataforseo(
     hl: str,
     device: str = "desktop",
     target_results: int = 100,
-    sleep_s: float = 0.3
+    sleep_s: float = 0.3,
+    debug_raw: bool = False
 ):
     """
-    Estrae fino a target_results ORGANIC (solo type=='organic') paginando con start=0,10,20...
-    Usa LIVE ADVANCED per avere items con vari tipi, ma poi filtra esclusivamente organic.
+    Estrae fino a target_results ORGANIC paginando con start=0,10,20...
+    1) Prova endpoint ADVANCED
+    2) Se ADVANCED ritorna 0 organic, prova endpoint REGULAR come fallback
     """
-    endpoint = "https://api.dataforseo.com/v3/serp/google/organic/live/advanced"
+    endpoint_advanced = "https://api.dataforseo.com/v3/serp/google/organic/live/advanced"
+    endpoint_regular  = "https://api.dataforseo.com/v3/serp/google/organic/live/regular"
+
     session = requests.Session()
     session.headers.update({
         "Authorization": _basic_auth_header(login, password),
@@ -118,14 +160,14 @@ def fetch_google_organic_100_dataforseo(
     start = 0
     page = 1
     no_new_pages = 0
-    max_pages = 30  # 30 pagine = 300 posizioni (ampio margine)
+    max_pages = 30  # 30 pagine = 300 posizioni (margine ampio)
 
+    # Parametri Google: pws=0 (no personalization), nfpr=1 (no autocorrect)
+    # NB: gl/hl qui DEVONO essere validi, per UK gl=gb
     while len(results) < target_results and page <= max_pages:
-        progress_bar.progress(min(len(results) / target_results, 0.95))
+        progress_bar.progress(min(len(results) / max(target_results, 1), 0.95))
         status.markdown(f"**🔄 Pagina {page} (start={start}) — Organic raccolti: {len(results)}/{target_results}**")
 
-        # Parametri Google per ridurre differenze col browser:
-        # pws=0 (personalization off), nfpr=1 (no auto-correct / no filter), num=10
         search_param = f"num=10&start={start}&pws=0&nfpr=1&hl={hl}&gl={gl}"
 
         payload = [{
@@ -135,26 +177,44 @@ def fetch_google_organic_100_dataforseo(
             "se_domain": se_domain,
             "device": device,
             "search_param": search_param,
-            "depth": 10  # prendiamo 10 per pagina, come Google
+            "depth": 10
         }]
 
         try:
-            r = session.post(endpoint, json=payload, timeout=60)
+            # 1) ADVANCED
+            r, data = _call_dataforseo(session, endpoint_advanced, payload, timeout_s=60)
+
             if r.status_code != 200:
                 status.error(f"❌ HTTP {r.status_code}: {r.text[:300]}")
                 break
 
-            data = r.json()
-            if data.get("status_code") != 20000:
-                status.error(f"❌ DataForSEO error: {data.get('status_message')}")
+            items, err = _extract_items(data)
+            if err:
+                status.error(f"❌ Errore parsing tasks/result: {err}")
+                if debug_raw:
+                    with st.expander("🔎 Debug RAW (advanced)"):
+                        st.write(data)
                 break
 
-            task = (data.get("tasks") or [{}])[0]
-            task_result = (task.get("result") or [{}])[0]
+            organic_items = [it for it in items if _is_organic(it)]
+            # Se ADVANCED non restituisce organic, proviamo REGULAR (fallback)
+            if len(organic_items) == 0:
+                r2, data2 = _call_dataforseo(session, endpoint_regular, payload, timeout_s=60)
+                if r2.status_code == 200:
+                    items2, err2 = _extract_items(data2)
+                    if not err2:
+                        organic_items = [it for it in items2 if _is_organic(it)]
+                    if debug_raw:
+                        with st.expander("🔎 Debug RAW (regular fallback)"):
+                            st.write(data2)
+                else:
+                    if debug_raw:
+                        with st.expander("🔎 Debug RAW (regular HTTP error)"):
+                            st.write(r2.text[:2000])
 
-            # Qui c’è la “pagina” completa con tanti item (organic, paa, kg, ecc.)
-            items = task_result.get("items") or []
-            organic_items = [it for it in items if it.get("type") == "organic"]
+            if debug_raw:
+                with st.expander("🔎 Debug RAW (advanced)"):
+                    st.write(data)
 
             new_this_page = 0
             for it in organic_items:
@@ -166,10 +226,11 @@ def fetch_google_organic_100_dataforseo(
                     continue
 
                 seen.add(url)
+                domain = ""
                 try:
                     domain = urlparse(url).netloc.lower()
                 except:
-                    domain = ""
+                    pass
 
                 results.append({
                     "Posizione": len(results) + 1,
@@ -185,7 +246,7 @@ def fetch_google_organic_100_dataforseo(
                 if len(results) >= target_results:
                     break
 
-            # Se per 2 pagine consecutive non troviamo nuovi organic, probabilmente la SERP è finita o sta “collassando”
+            # Stop condition: 2 pagine consecutive senza nuovi organic
             if new_this_page == 0:
                 no_new_pages += 1
                 if no_new_pages >= 2:
@@ -193,13 +254,12 @@ def fetch_google_organic_100_dataforseo(
             else:
                 no_new_pages = 0
 
-            # prossima pagina
             start += 10
             page += 1
             time.sleep(sleep_s)
 
         except requests.exceptions.Timeout:
-            status.warning(f"⚠️ Timeout su pagina {page}. Ritento andando avanti...")
+            status.warning(f"⚠️ Timeout su pagina {page}. Vado avanti...")
             start += 10
             page += 1
             time.sleep(1.0)
@@ -218,7 +278,7 @@ def fetch_google_organic_100_dataforseo(
 
 
 # ----------------------------
-# EXPORT + CHARTS (tuoi)
+# EXPORT + CHARTS
 # ----------------------------
 def create_excel_export(df, query):
     output = BytesIO()
@@ -323,7 +383,7 @@ with col2:
 
 col3, col4 = st.columns(2)
 with col3:
-    paese_sel = st.selectbox("🌍 Paese", list(PAESI.keys()), index=0)
+    paese_sel = st.selectbox("🌍 Paese", list(PAESI.keys()), index=3)  # default UK se vuoi
 with col4:
     device = st.selectbox("📱 Device", ["desktop", "mobile"], index=0)
 
@@ -333,6 +393,9 @@ with c5:
     dfs_login = st.text_input("Login (DataForSEO)", value="", placeholder="email o login DataForSEO")
 with c6:
     dfs_password = st.text_input("Password (DataForSEO)", value="", type="password", placeholder="password DataForSEO")
+
+st.markdown("### 🛠️ Debug")
+debug_raw = st.checkbox("Mostra risposta RAW API (debug)", value=False)
 
 st.markdown("<br>", unsafe_allow_html=True)
 
@@ -344,7 +407,7 @@ if st.button("🚀 ANALIZZA SERP (SOLO ORGANIC)", use_container_width=True):
     else:
         info = PAESI[paese_sel]
         with st.spinner("Estrazione SERP (organic) in corso..."):
-            results = fetch_google_organic_100_dataforseo(
+            results = fetch_google_organic_dataforseo(
                 keyword=query.strip(),
                 login=dfs_login.strip(),
                 password=dfs_password.strip(),
@@ -355,11 +418,13 @@ if st.button("🚀 ANALIZZA SERP (SOLO ORGANIC)", use_container_width=True):
                 hl=info["hl"],
                 device=device,
                 target_results=int(num_results),
+                debug_raw=debug_raw
             )
 
         st.session_state['results'] = results
         st.session_state['query'] = query.strip()
         st.session_state['paese'] = paese_sel
+
 
 # ----------------------------
 # RESULTS
@@ -457,6 +522,9 @@ if 'results' in st.session_state and st.session_state['results']:
     with tab5:
         st.markdown("### 📊 Tabella Dati Completa (SOLO Organic)")
         st.dataframe(df, use_container_width=True, height=500)
+
+else:
+    st.info("👉 Esegui una ricerca per vedere i risultati.")
 
 st.markdown("---")
 st.markdown("<p style='text-align: center; color: #999;'>🔍 SERP Analyzer PRO - DataForSEO (SOLO Organic)</p>", unsafe_allow_html=True)
