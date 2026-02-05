@@ -9,7 +9,7 @@ from io import BytesIO
 import base64
 
 # ----------------------------
-# PAGE CONFIG + CSS (tuo)
+# PAGE CONFIG + CSS
 # ----------------------------
 st.set_page_config(
     page_title="SERP Analyzer Pro - Avantgrade",
@@ -72,11 +72,12 @@ st.markdown("""
 # ----------------------------
 # DATAFORSEO HELPERS
 # ----------------------------
+# Codici paese ISO 3166-1 alpha-2 corretti per Google
 PAESI = {
     "Italia 🇮🇹": {"gl": "it", "hl": "it", "location_code": 2380, "language_code": "it", "se_domain": "google.it"},
     "Spagna 🇪🇸": {"gl": "es", "hl": "es", "location_code": 2724, "language_code": "es", "se_domain": "google.es"},
     "Francia 🇫🇷": {"gl": "fr", "hl": "fr", "location_code": 2250, "language_code": "fr", "se_domain": "google.fr"},
-    "UK 🇬🇧": {"gl": "uk", "hl": "en", "location_code": 2826, "language_code": "en", "se_domain": "google.co.uk"},
+    "UK 🇬🇧": {"gl": "gb", "hl": "en", "location_code": 2826, "language_code": "en", "se_domain": "google.co.uk"},
     "Germania 🇩🇪": {"gl": "de", "hl": "de", "location_code": 2276, "language_code": "de", "se_domain": "google.de"},
     "USA 🇺🇸": {"gl": "us", "hl": "en", "location_code": 2840, "language_code": "en", "se_domain": "google.com"},
 }
@@ -152,7 +153,7 @@ def fetch_google_organic_100_dataforseo(
             task = (data.get("tasks") or [{}])[0]
             task_result = (task.get("result") or [{}])[0]
 
-            # Qui c’è la “pagina” completa con tanti item (organic, paa, kg, ecc.)
+            # Qui c'è la "pagina" completa con tanti item (organic, paa, kg, ecc.)
             items = task_result.get("items") or []
             organic_items = [it for it in items if it.get("type") == "organic"]
 
@@ -185,7 +186,7 @@ def fetch_google_organic_100_dataforseo(
                 if len(results) >= target_results:
                     break
 
-            # Se per 2 pagine consecutive non troviamo nuovi organic, probabilmente la SERP è finita o sta “collassando”
+            # Se per 2 pagine consecutive non troviamo nuovi organic, probabilmente la SERP è finita o sta "collassando"
             if new_this_page == 0:
                 no_new_pages += 1
                 if no_new_pages >= 2:
@@ -303,8 +304,8 @@ def create_length_distribution(df):
 # UI
 # ----------------------------
 st.markdown("""
-<div style='background: linear-gradient(135deg, #FF6B35 0%, #F7931E 100%); 
-            padding: 2rem; border-radius: 15px; text-align: center; 
+<div style='background: linear-gradient(135deg, #FF6B35 0%, #F7931E 100%);
+            padding: 2rem; border-radius: 15px; text-align: center;
             box-shadow: 0 8px 16px rgba(255, 107, 53, 0.3); margin-bottom: 2rem;'>
     <h1 style='margin: 0; font-size: 2.5em; text-shadow: 2px 2px 4px rgba(0,0,0,0.3); color: white !important;'>
         🔍 SERP Analyzer PRO
